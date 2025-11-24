@@ -1,0 +1,10 @@
+project_id = "tohgxyzfrkzpujkviutj"
+
+[functions.increment-stats]
+verify_jwt = false
+
+[functions.process-notifications]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false

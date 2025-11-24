@@ -1,0 +1,243 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useAuth } from './useAuth';
+
+export interface FriendRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: string;
+  created_at: string;
+  sender?: {
+    id: string;
+    name: string;
+    username: string;
+    avatar_url: string | null;
+  };
+  receiver?: {
+    id: string;
+    name: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}
+
+export const useOptimizedFriendRequests = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Fetch sent requests with pagination
+  const { data: sentRequests = [], isLoading: sentLoading } = useQuery({
+    queryKey: ['friend-requests', 'sent', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          *,
+          receiver:profiles!friend_requests_receiver_id_fkey(id, name, username, avatar_url)
+        `)
+        .eq('sender_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as FriendRequest[];
+    },
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
+  });
+
+  // Fetch received requests with pagination
+  const { data: receivedRequests = [], isLoading: receivedLoading } = useQuery({
+    queryKey: ['friend-requests', 'received', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          *,
+          sender:profiles!friend_requests_sender_id_fkey(id, name, username, avatar_url)
+        `)
+        .eq('receiver_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as FriendRequest[];
+    },
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
+  });
+
+  // Fetch accepted friends
+  const { data: friends = [], isLoading: friendsLoading } = useQuery({
+    queryKey: ['friends', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          *,
+          sender:profiles!friend_requests_sender_id_fkey(id, name, username, avatar_url),
+          receiver:profiles!friend_requests_receiver_id_fkey(id, name, username, avatar_url)
+        `)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .eq('status', 'accepted')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as FriendRequest[];
+    },
+    enabled: !!user?.id,
+    staleTime: 60 * 1000, // 1 minute
+  });
+
+  // Send friend request with optimistic updates
+  const { mutate: sendFriendRequest } = useMutation({
+    mutationFn: async (receiverId: string) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      
+      const { error } = await supabase
+        .from('friend_requests')
+        .insert({
+          sender_id: user.id,
+          receiver_id: receiverId,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friend-requests', 'sent'] });
+      toast.success('Demande envoyée');
+    },
+    onError: (error) => {
+      console.error('Error sending friend request:', error);
+      toast.error('Erreur lors de l\'envoi');
+    }
+  });
+
+  // Accept friend request with optimistic updates
+  const { mutate: acceptFriendRequest } = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'accepted' })
+        .eq('id', requestId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      toast.success('Demande acceptée');
+    },
+    onError: (error) => {
+      console.error('Error accepting friend request:', error);
+      toast.error('Erreur lors de l\'acceptation');
+    }
+  });
+
+  // Reject friend request
+  const { mutate: rejectFriendRequest } = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+      toast.success('Demande refusée');
+    },
+    onError: (error) => {
+      console.error('Error rejecting friend request:', error);
+      toast.error('Erreur lors du refus');
+    }
+  });
+
+  // Cancel friend request
+  const { mutate: cancelFriendRequest } = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from('friend_requests')
+        .delete()
+        .eq('id', requestId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friend-requests', 'sent'] });
+      toast.success('Demande annulée');
+    },
+    onError: (error) => {
+      console.error('Error canceling friend request:', error);
+      toast.error('Erreur lors de l\'annulation');
+    }
+  });
+
+  // Remove friend
+  const { mutate: removeFriend } = useMutation({
+    mutationFn: async (friendId: string) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      
+      const { error } = await supabase
+        .from('friend_requests')
+        .delete()
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
+        .eq('status', 'accepted');
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      toast.success('Ami retiré');
+    },
+    onError: (error) => {
+      console.error('Error removing friend:', error);
+      toast.error('Erreur lors du retrait');
+    }
+  });
+
+  // Get friendship status
+  const getFriendshipStatus = (targetUserId: string): 'none' | 'pending_sent' | 'pending_received' | 'friends' => {
+    if (!user?.id) return 'none';
+
+    // Check if friends
+    const isFriend = friends.some(
+      fr => (fr.sender_id === user.id && fr.receiver_id === targetUserId) ||
+            (fr.receiver_id === user.id && fr.sender_id === targetUserId)
+    );
+    if (isFriend) return 'friends';
+
+    // Check sent requests
+    const hasSentRequest = sentRequests.some(fr => fr.receiver_id === targetUserId);
+    if (hasSentRequest) return 'pending_sent';
+
+    // Check received requests
+    const hasReceivedRequest = receivedRequests.some(fr => fr.sender_id === targetUserId);
+    if (hasReceivedRequest) return 'pending_received';
+
+    return 'none';
+  };
+
+  return {
+    sentRequests,
+    receivedRequests,
+    friends,
+    loading: sentLoading || receivedLoading || friendsLoading,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    cancelFriendRequest,
+    removeFriend,
+    getFriendshipStatus,
+  };
+};

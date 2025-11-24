@@ -1,0 +1,81 @@
+# Cache headers for Cloudflare and other CDNs
+
+# Assets - Cache for 1 year (immutable)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# Images - Cache for 1 week
+/*.jpg
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.jpeg
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.png
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.gif
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.webp
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.svg
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+/*.ico
+  Cache-Control: public, max-age=604800
+  X-Content-Type-Options: nosniff
+
+# Fonts - Cache for 1 year
+/*.woff
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.ttf
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.otf
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.eot
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# JavaScript & CSS - Cache for 1 year (immutable)
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# HTML - No cache (always fresh)
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# Service Worker
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Manifest
+/manifest.json
+  Cache-Control: public, max-age=86400
