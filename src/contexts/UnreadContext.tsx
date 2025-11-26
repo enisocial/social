@@ -11,6 +11,7 @@ interface UnreadContextType {
   conversationUnreads: Map<string, number>;
   loading: boolean;
   optimisticReset: (conversationId: string) => void;
+  optimisticUpdate: (conversationId: string, newCount: number) => void;
   refetch: () => Promise<void>;
 }
 
@@ -74,6 +75,19 @@ export const UnreadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, []);
 
+  const optimisticUpdate = useCallback((conversationId: string, newCount: number) => {
+    setUnreadData(prev => {
+      const oldCount = prev.conversationUnreads.get(conversationId) || 0;
+      const newMap = new Map(prev.conversationUnreads);
+      newMap.set(conversationId, newCount);
+      
+      return {
+        totalUnread: Math.max(0, prev.totalUnread - oldCount + newCount),
+        conversationUnreads: newMap
+      };
+    });
+  }, []);
+
   // Setup Realtime subscription for unread updates
   useEffect(() => {
     if (!userId) return;
@@ -125,6 +139,7 @@ export const UnreadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       conversationUnreads: unreadData.conversationUnreads,
       loading,
       optimisticReset,
+      optimisticUpdate,
       refetch: fetchUnreadCounts
     }}>
       {children}
@@ -142,6 +157,7 @@ export const useUnreadMessages = () => {
         conversationUnreads: new Map(),
         loading: false,
         optimisticReset: () => {},
+        optimisticUpdate: () => {},
         refetch: async () => {}
     };
   }

@@ -102,6 +102,56 @@ export const useOptimizedFriendRequests = () => {
     mutationFn: async (receiverId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
       
+      // First, check if there is already a request in the other direction (pending)
+      // If so, we should ACCEPT it instead of sending a new one (or let the UI handle it, but let's be safe)
+      const { data: existingReceived } = await supabase
+        .from('friend_requests')
+        .select('id, status')
+        .eq('sender_id', receiverId)
+        .eq('receiver_id', user.id)
+        .maybeSingle();
+
+      if (existingReceived) {
+        if (existingReceived.status === 'pending') {
+          // Auto-accept the request
+          const { error: acceptError } = await supabase
+            .from('friend_requests')
+            .update({ status: 'accepted' })
+            .eq('id', existingReceived.id);
+          
+          if (acceptError) throw acceptError;
+          return 'accepted'; // Return a flag
+        } else if (existingReceived.status === 'accepted') {
+          return 'already_friends';
+        }
+      }
+
+      // Check if we already sent one
+      const { data: existingSent } = await supabase
+        .from('friend_requests')
+        .select('id, status')
+        .eq('sender_id', user.id)
+        .eq('receiver_id', receiverId)
+        .maybeSingle();
+
+      if (existingSent) {
+        if (existingSent.status === 'pending') return 'already_sent';
+        if (existingSent.status === 'accepted') return 'already_friends';
+        // If rejected, we might want to allow resending or not. For now, let's try inserting and let DB decide or update.
+        // Actually, RLS usually allows insert. Unique constraint will fail.
+        // We should update if it exists but was rejected/cancelled? Or delete and insert?
+        // friend_requests has UNIQUE(sender, receiver).
+        // If rejected, we probably want to update status to pending.
+        const { error: updateError } = await supabase
+          .from('friend_requests')
+          .update({ status: 'pending' })
+          .eq('id', existingSent.id);
+        
+        if (updateError) throw updateError;
+        return 'sent';
+      }
+
+      // Insert new request
       const { error } = await supabase
         .from('friend_requests')
         .insert({
@@ -110,15 +160,32 @@ export const useOptimizedFriendRequests = () => {
           status: 'pending'
         });
 
-      if (error) throw error;
+      if (error) {
+        // Check for duplicate key error code (Postgres 23505)
+        if (error.code === '23505') {
+           return 'already_sent';
+        }
+        throw error;
+      }
+      return 'sent';
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['friend-requests', 'sent'] });
-      toast.success('Demande envoyée');
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      
+      if (result === 'accepted') {
+        toast.success('Vous êtes maintenant amis !');
+      } else if (result === 'already_friends') {
+        toast.info('Vous êtes déjà amis');
+      } else if (result === 'already_sent') {
+        toast.info('Demande déjà envoyée');
+      } else {
+        toast.success('Demande envoyée');
+      }
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error sending friend request:', error);
-      toast.error('Erreur lors de l\'envoi');
+      toast.error(`Erreur: ${error.message || 'Impossible d\'envoyer la demande'}`);
     }
   });
 
