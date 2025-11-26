@@ -229,26 +229,15 @@ export const useWebRTCStream = ({
             }
           })
           
-          .on('broadcast', { event: 'broadcaster-offer' }, async ({ payload }) => {
+          // === FIX: Viewer expects ANSWER from broadcaster (since viewer sent the offer) ===
+          .on('broadcast', { event: 'broadcaster-answer' }, async ({ payload }) => {
             if (payload.to !== user.id) return;
-            console.log('📥 [WebRTC] Received offer from broadcaster');
+            console.log('📥 [WebRTC] Received answer from broadcaster');
             try {
-              await viewerPC.setRemoteDescription(new RTCSessionDescription(payload.offer));
-              const answer = await viewerPC.createAnswer();
-              await viewerPC.setLocalDescription(answer);
-              
-              console.log('📤 [WebRTC] Sending answer');
-              channelRef.current?.send({
-                type: 'broadcast',
-                event: 'viewer-answer',
-                payload: {
-                  answer: answer,
-                  from: user.id,
-                  to: payload.from,
-                },
-              });
+              await viewerPC.setRemoteDescription(new RTCSessionDescription(payload.answer));
+              console.log('✅ [WebRTC] Remote description set (Connection established)');
             } catch (error) {
-              console.error('❌ [WebRTC] Error handling offer:', error);
+              console.error('❌ [WebRTC] Error handling answer:', error);
               setIsConnecting(false);
             }
           })

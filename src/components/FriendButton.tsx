@@ -1,5 +1,4 @@
-import { Button } from '@/components/ui/button';
-import { useFriendRequests } from '@/hooks/useFriendRequests';
+import { useOptimizedFriendRequests } from '@/hooks/useOptimizedFriendRequests';
 import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useMessenger } from '@/contexts/MessengerContext';
@@ -35,7 +34,7 @@ export function FriendButton({
     removeFriend,
     getFriendshipStatus,
     receivedRequests,
-  } = useFriendRequests(user?.id);
+  } = useOptimizedFriendRequests(); // Use optimized hook
   const { createConversation } = useConversations();
   const { openBubble } = useMessenger();
 

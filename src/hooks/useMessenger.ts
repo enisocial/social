@@ -6,6 +6,8 @@ import { debounce, throttle } from '@/utils/performance';
 import { checkRateLimit } from '@/utils/rate-limit.utils';
 import { performanceMonitor, errorTracker } from '@/utils/monitoring.utils';
 
+import { cacheService } from '@/services/cache.service';
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -258,10 +260,19 @@ export const useMessenger = (conversationId: string) => {
         if (error.code === '23503') { // Foreign key violation
            throw new Error('Conversation invalide ou introuvable');
         }
-        // Check for plan limits/read-only mode
-        if (error.code === '53100' || error.code === '53200' || error.message?.includes('read-only transaction') || error.message?.includes('Exceeding your plans')) {
+        
+        // Check for plan limits/read-only mode in message, details, or hint
+        const errorString = `${error.message} ${error.details} ${error.hint}`.toLowerCase();
+        if (
+          error.code === '53100' || 
+          error.code === '53200' || 
+          errorString.includes('read-only transaction') || 
+          errorString.includes('exceeding your plans') ||
+          errorString.includes('disk full')
+        ) {
            throw new Error('Limite de stockage atteinte. Veuillez contacter l\'administrateur ou mettre à niveau le plan.');
         }
+        
         throw error;
       }
 
@@ -275,13 +286,13 @@ export const useMessenger = (conversationId: string) => {
       const errorMessage = err.message || 'Erreur inconnue';
       if (errorMessage.includes('Conversation invalide')) {
         // Clear cache to force refresh next time
-        // We can't import cacheService here easily due to circular deps if not careful,
-        // but better to just guide user to refresh.
+        cacheService.clear(); // Drastic but effective for fixing stuck states
         toast.error('Erreur de conversation. Veuillez rafraîchir la page.');
       } else if (errorMessage.includes('Limite de stockage') || errorMessage.includes('plans')) {
         toast.error(errorMessage);
       } else {
-        toast.error('Erreur lors de l\'envoi du message');
+        // Show specific error for debugging
+        toast.error(`Erreur lors de l'envoi du message : ${errorMessage}`);
       }
     } finally {
       setSending(false);

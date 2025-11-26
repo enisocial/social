@@ -75,39 +75,6 @@ serve(async (req) => {
         });
       }
 
-      case 'signal': {
-        // WebRTC signaling via Realtime
-        const channel = supabaseClient.channel(`stream:${streamId}`);
-        
-        if (offer) {
-          await channel.send({
-            type: 'broadcast',
-            event: 'offer',
-            payload: { offer, from: user.id },
-          });
-        }
-        
-        if (answer) {
-          await channel.send({
-            type: 'broadcast',
-            event: 'answer',
-            payload: { answer, from: user.id },
-          });
-        }
-        
-        if (candidate) {
-          await channel.send({
-            type: 'broadcast',
-            event: 'ice-candidate',
-            payload: { candidate, from: user.id },
-          });
-        }
-
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
       case 'update-viewers': {
         // Update viewer count
         const { data: participants } = await supabaseClient

@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { MediaUploader } from './MediaUploader';
 
 type PostPrivacy = 'public' | 'friends' | 'private';
 
@@ -45,40 +46,6 @@ export const FacebookCreatePost = () => {
     },
     enabled: !!user
   });
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    
-    if (mediaFiles.length + files.length > 10) {
-      toast.error('Maximum 10 médias par publication');
-      return;
-    }
-
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'];
-    const invalidFiles = files.filter(f => !validTypes.includes(f.type));
-    
-    if (invalidFiles.length > 0) {
-      toast.error('Type de fichier non supporté');
-      return;
-    }
-
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    const oversizedFiles = files.filter(f => f.size > maxSize);
-    
-    if (oversizedFiles.length > 0) {
-      toast.error('Fichier trop volumineux (max 100MB)');
-      return;
-    }
-
-    setMediaFiles(prev => [...prev, ...files]);
-    const newPreviews = files.map(f => URL.createObjectURL(f));
-    setMediaPreviews(prev => [...prev, ...newPreviews]);
-  };
-
-  const removeMedia = (index: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== index));
-    setMediaPreviews(prev => prev.filter((_, i) => i !== index));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,12 +185,13 @@ export const FacebookCreatePost = () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['feed'] }),
         queryClient.invalidateQueries({ queryKey: ['smart-feed'] }),
+        queryClient.invalidateQueries({ queryKey: ['optimized-feed'] }), // Fixed key
         queryClient.invalidateQueries({ queryKey: ['posts'] }),
         queryClient.invalidateQueries({ queryKey: ['profile-posts'] })
       ]);
       
       // Force un refetch
-      await queryClient.refetchQueries({ queryKey: ['smart-feed'] });
+      await queryClient.refetchQueries({ queryKey: ['optimized-feed'] });
     } catch (error: any) {
       console.error('Error creating post:', error);
       toast.error('Erreur lors de la publication', { id: 'post-creation' });
@@ -263,7 +231,12 @@ export const FacebookCreatePost = () => {
               className="flex-1 gap-2 hover:bg-muted"
               onClick={() => {
                 setDialogOpen(true);
-                setTimeout(() => fileInputRef.current?.click(), 100);
+                // Use a small timeout to ensure the dialog is mounted before clicking the input
+                // But since we use MediaUploader now, we might want to trigger its input
+                setTimeout(() => {
+                   const input = document.getElementById('media-input');
+                   if (input) input.click();
+                }, 100);
               }}
             >
               <Image className="h-5 w-5 text-green-500" />
@@ -337,46 +310,14 @@ export const FacebookCreatePost = () => {
               disabled={isSubmitting}
             />
 
-            {/* Media Preview Grid */}
-            {mediaPreviews.length > 0 && (
-              <div className={`grid gap-2 ${
-                mediaPreviews.length === 1 ? 'grid-cols-1' :
-                mediaPreviews.length === 2 ? 'grid-cols-2' :
-                mediaPreviews.length === 3 ? 'grid-cols-3' :
-                'grid-cols-2'
-              }`}>
-                {mediaPreviews.map((preview, index) => (
-                  <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-muted group">
-                    {mediaFiles[index].type.startsWith('video') ? (
-                      <video src={preview} className="w-full h-full object-cover" />
-                    ) : (
-                      <img src={preview} alt="" className="w-full h-full object-cover" />
-                    )}
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => removeMedia(index)}
-                      disabled={isSubmitting}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                
-                {mediaPreviews.length < 10 && (
-                  <button
-                    type="button"
-                    className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 flex items-center justify-center transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isSubmitting}
-                  >
-                    <Image className="h-8 w-8 text-muted-foreground" />
-                  </button>
-                )}
-              </div>
-            )}
+            {/* Media Uploader Component */}
+            <MediaUploader 
+              files={mediaFiles}
+              setFiles={setMediaFiles}
+              previews={mediaPreviews}
+              setPreviews={setMediaPreviews}
+              inputRef={fileInputRef}
+            />
 
             {/* Upload Progress */}
             {uploadProgress > 0 && (
@@ -407,16 +348,6 @@ export const FacebookCreatePost = () => {
               </motion.div>
             )}
 
-            {/* Hidden File Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-
             {/* Add to Post Actions */}
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <span className="text-sm font-medium">Ajouter à votre publication</span>
@@ -425,7 +356,7 @@ export const FacebookCreatePost = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => document.getElementById('media-input')?.click()}
                   disabled={isSubmitting}
                   title="Photo/Vidéo"
                 >
