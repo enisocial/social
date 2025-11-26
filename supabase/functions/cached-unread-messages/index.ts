@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 interface RedisCache {
-  get: (key: string) => Promise<any>;
-  set: (key: string, value: any, ttl: number) => Promise<void>;
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown, ttl: number) => Promise<void>;
   del: (key: string) => Promise<void>;
 }
 
@@ -28,7 +28,7 @@ class UpstashRedis implements RedisCache {
     }
   }
 
-  async get(key: string): Promise<any> {
+  async get(key: string): Promise<unknown> {
     if (!this.enabled) return null;
 
     try {
@@ -46,7 +46,7 @@ class UpstashRedis implements RedisCache {
     }
   }
 
-  async set(key: string, value: any, ttl: number): Promise<void> {
+  async set(key: string, value: unknown, ttl: number): Promise<void> {
     if (!this.enabled) return;
 
     try {
@@ -56,7 +56,7 @@ class UpstashRedis implements RedisCache {
           Authorization: `Bearer ${this.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(value),
+        body: JSON.stringify(value as object),
       });
       
       if (!response.ok) {
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
     }
 
     // Try to get from cache
-    const cachedData = await redis.get(cacheKey);
+    const cachedData = await redis.get(cacheKey) as { totalUnread: number; conversationUnreads: Record<string, number> } | null;
     if (cachedData && !bustCache) {
       const elapsed = performance.now() - startTime;
       console.log(`✅ Cache HIT for ${cacheKey} (${elapsed.toFixed(2)}ms)`);

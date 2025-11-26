@@ -96,7 +96,7 @@ export const Navbar = () => {
   });
 
   // Use centralized unread messages hook
-  const { totalUnread: unreadMessagesCount } = useUnreadMessages(user?.id || null);
+  const { totalUnread: unreadMessagesCount } = useUnreadMessages();
 
   // Subscribe to realtime updates for notifications only
   // (messages are handled by useUnreadMessages hook)

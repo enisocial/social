@@ -1,59 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-interface RedisCache {
-  del: (key: string) => Promise<void>;
-  keys: (pattern: string) => Promise<string[]>;
-}
-
-class UpstashRedis implements RedisCache {
-  private baseUrl: string;
-  private token: string;
-  private enabled: boolean;
-
-  constructor() {
-    this.baseUrl = Deno.env.get('UPSTASH_REDIS_REST_URL') || '';
-    this.token = Deno.env.get('UPSTASH_REDIS_REST_TOKEN') || '';
-    this.enabled = !!(this.baseUrl && this.token);
-  }
-
-  async del(key: string): Promise<void> {
-    if (!this.enabled) return;
-
-    try {
-      await fetch(`${this.baseUrl}/del/${key}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-    } catch (error) {
-      console.error('Redis DEL error:', error);
-    }
-  }
-
-  async keys(pattern: string): Promise<string[]> {
-    if (!this.enabled) return [];
-
-    try {
-      const response = await fetch(`${this.baseUrl}/keys/${pattern}`, {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-
-      if (!response.ok) return [];
-
-      const data = await response.json();
-      return data.result || [];
-    } catch (error) {
-      console.error('Redis KEYS error:', error);
-      return [];
-    }
-  }
-}
-
-const redis = new UpstashRedis();
+import { corsHeaders } from '../_shared/cors.ts';
+import { redis } from '../_shared/redis.ts';
 
 /**
  * Cache Invalidation Edge Function

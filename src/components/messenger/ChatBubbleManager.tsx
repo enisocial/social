@@ -12,22 +12,35 @@ export const ChatBubbleManager = memo(() => {
     [isMobile, bubbles]
   );
 
-  if (isMobile && displayBubbles.length === 0) return null;
+  // On mobile, if all visible bubbles are minimized, don't render anything
+  // This prevents the manager container from blocking the screen
+  const shouldRender = useMemo(() => {
+    if (!displayBubbles.length) return false;
+    if (isMobile) {
+      return displayBubbles.some(b => !b.isMinimized);
+    }
+    return true;
+  }, [displayBubbles, isMobile]);
+
+  if (!shouldRender) return null;
 
   return (
-    <div className={`fixed transition-all duration-200 ${
+    <div 
+      data-testid="chat-bubble-manager"
+      className={`fixed transition-all duration-200 pointer-events-none ${
       isMobile 
-        ? 'inset-0 z-[100] bg-background' 
+        ? 'inset-0 z-[100]' // Removed bg-background
         : 'bottom-0 right-4 z-50 flex gap-3 items-end pb-4'
     }`}>
       {displayBubbles.map((bubble, index) => (
-        <ChatBubble
-          key={bubble.conversationId}
-          conversationId={bubble.conversationId}
-          otherUser={bubble.otherUser}
-          isMinimized={bubble.isMinimized}
-          position={index}
-        />
+        <div key={bubble.conversationId} className="pointer-events-auto">
+          <ChatBubble
+            conversationId={bubble.conversationId}
+            otherUser={bubble.otherUser}
+            isMinimized={bubble.isMinimized}
+            position={index}
+          />
+        </div>
       ))}
     </div>
   );

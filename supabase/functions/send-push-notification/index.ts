@@ -1,9 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from '../_shared/cors.ts';
 
 // WonderPush API credentials
 const WONDERPUSH_CLIENT_ID = Deno.env.get('WONDERPUSH_CLIENT_ID') || '';
@@ -16,7 +12,7 @@ interface NotificationPayload {
   body: string;
   icon?: string;
   badge?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 async function sendWonderPushNotification(
@@ -25,7 +21,7 @@ async function sendWonderPushNotification(
     title: string;
     body: string;
     icon?: string;
-    data?: Record<string, any>;
+    data?: Record<string, unknown>;
   }
 ): Promise<boolean> {
   try {
@@ -76,6 +72,24 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+
+    // Verify the user
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    // Service role client for admin operations
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''

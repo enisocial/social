@@ -67,7 +67,8 @@ export const usePresence = (userId?: string) => {
       );
     };
 
-    // Heartbeat every 10 seconds to keep connection alive (more frequent)
+    // Heartbeat every 30 seconds to keep connection alive
+    // Increased interval to reduce DB load while maintaining reasonable accuracy
     heartbeatIntervalRef.current = setInterval(async () => {
       if (!document.hidden && isActiveRef.current) {
         // Verify user is still authenticated before updating presence
@@ -82,7 +83,7 @@ export const usePresence = (userId?: string) => {
           }
         }
       }
-    }, 10000);
+    }, 30000);
 
     // Check online status more frequently
     const onlineCheckInterval = setInterval(async () => {
@@ -97,7 +98,7 @@ export const usePresence = (userId?: string) => {
       } else if (!navigator.onLine) {
         setOffline();
       }
-    }, 5000);
+    }, 15000); // Increased from 5000 to 15000 to reduce load
 
     // Listen to online/offline events
     const handleOnline = () => setOnline();

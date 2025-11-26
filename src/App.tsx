@@ -10,6 +10,7 @@ import { PageTransition } from "@/components/PageTransition";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { UserProtectedRoute } from "@/components/UserProtectedRoute";
+import { UnreadProvider } from "@/contexts/UnreadContext";
 import { MessengerProvider } from "@/contexts/MessengerContext";
 import { ChatBubbleManager } from "@/components/messenger/ChatBubbleManager";
 import { RoutePreloader } from "@/components/RoutePreloader";
@@ -144,15 +145,17 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <TooltipProvider>
-        <MessengerProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <RoutePreloader />
-            <AnimatedRoutes />
-            <ChatBubbleManager />
-          </BrowserRouter>
-        </MessengerProvider>
+        <UnreadProvider>
+          <MessengerProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <RoutePreloader />
+              <AnimatedRoutes />
+              <ChatBubbleManager />
+            </BrowserRouter>
+          </MessengerProvider>
+        </UnreadProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

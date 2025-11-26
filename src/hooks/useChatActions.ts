@@ -4,48 +4,24 @@ import { supabase } from '@/integrations/supabase/client';
 import { cacheService } from '@/services/cache.service';
 import { CACHE_CONFIG } from '@/config/app.config';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 
 export const useChatActions = () => {
-  const { openBubble, closeBubble } = useMessenger();
+  const { openBubble } = useMessenger();
   const { createConversation } = useConversations();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const openChatWithUser = async (
     userId: string,
     userInfo?: { name: string; username: string; avatar_url: string | null }
   ) => {
     try {
-      const cacheKey = `chat_user_${userId}`;
-      let userData = cacheService.get<typeof userInfo>(cacheKey);
+      // 1. Get User Info (Cache -> Supabase)
+      const userCacheKey = `chat_user_${userId}`;
+      let userData = userInfo || cacheService.get<typeof userInfo>(userCacheKey);
 
-      // If userInfo provided directly, use it immediately - INSTANT OPEN
-      if (userInfo) {
-        userData = userInfo;
-        cacheService.set(cacheKey, userInfo, CACHE_CONFIG.LONG_CACHE);
-        
-        // Open bubble INSTANTLY with temp conversation ID
-        const tempConvId = `temp_${userId}`;
-        openBubble(tempConvId, {
-          id: userId,
-          name: userData.name,
-          username: userData.username,
-          avatar_url: userData.avatar_url
-        });
-
-        // Create conversation in background and replace temp ID
-        const conversationId = await createConversation(userId);
-        if (conversationId && conversationId !== tempConvId) {
-          closeBubble(tempConvId);
-          openBubble(conversationId, {
-            id: userId,
-            name: userData.name,
-            username: userData.username,
-            avatar_url: userData.avatar_url
-          });
-        }
-        return;
-      }
-
-      // No userInfo provided - need to fetch
       if (!userData) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -55,7 +31,7 @@ export const useChatActions = () => {
 
         if (profile) {
           userData = profile;
-          cacheService.set(cacheKey, profile, CACHE_CONFIG.LONG_CACHE);
+          cacheService.set(userCacheKey, profile, CACHE_CONFIG.LONG_CACHE);
         }
       }
 
@@ -64,8 +40,20 @@ export const useChatActions = () => {
         return;
       }
 
-      // Open with fetched data
-      const conversationId = await createConversation(userId);
+      // 2. Get Conversation ID (Cache -> Create/Fetch)
+      // We cache the conversation ID for this user pair to avoid "temp" IDs and UI flickering
+      const convCacheKey = `chat_conv_id_${userId}`;
+      let conversationId = cacheService.get<string>(convCacheKey);
+
+      if (!conversationId) {
+        // If not in cache, create/fetch it
+        conversationId = await createConversation(userId);
+        if (conversationId) {
+          cacheService.set(convCacheKey, conversationId, CACHE_CONFIG.LONG_CACHE);
+        }
+      }
+
+      // 3. Open Bubble
       if (conversationId) {
         openBubble(conversationId, {
           id: userId,
@@ -73,6 +61,20 @@ export const useChatActions = () => {
           username: userData.username,
           avatar_url: userData.avatar_url
         });
+
+        // 4. Optimistically update Online Friends list to link this user to this conversation
+        // This ensures the badge disappears immediately even if the list hasn't refetched yet
+        if (user?.id) {
+          queryClient.setQueryData(['online-friends', user.id], (oldData: any[]) => {
+            if (!oldData) return oldData;
+            return oldData.map(friend => {
+              if (friend.id === userId) {
+                return { ...friend, conversation_id: conversationId };
+              }
+              return friend;
+            });
+          });
+        }
       }
     } catch (error) {
       console.error('Error opening chat:', error);

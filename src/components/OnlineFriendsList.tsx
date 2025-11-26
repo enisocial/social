@@ -1,4 +1,3 @@
-import { useOnlineFriends } from '@/hooks/useOnlineFriends';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatActions } from '@/hooks/useChatActions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,6 +8,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { memo, useCallback } from 'react';
+import { useOnlineFriends } from '@/hooks/useOnlineFriends';
+import { useUnreadMessages } from '@/contexts/UnreadContext';
 
 interface OnlineFriendsListProps {
   userId: string;
@@ -76,6 +77,7 @@ export const OnlineFriendsList = memo(({ userId }: OnlineFriendsListProps) => {
   const { user } = useAuth();
   const { onlineFriends, loading } = useOnlineFriends(user?.id);
   const { openChatWithUser } = useChatActions();
+  const { conversationUnreads } = useUnreadMessages();
   const isMobile = useIsMobile();
 
   const handleChatOpen = useCallback((friend: typeof onlineFriends[0]) => {
@@ -114,13 +116,21 @@ export const OnlineFriendsList = memo(({ userId }: OnlineFriendsListProps) => {
   return (
     <ScrollArea className={isMobile ? "h-[calc(100vh-180px)]" : "h-[calc(100vh-200px)]"}>
       <div className="space-y-0.5">
-        {onlineFriends.map((friend) => (
-          <OnlineFriendItem
-            key={friend.id}
-            friend={friend}
-            onClick={() => handleChatOpen(friend)}
-          />
-        ))}
+        {onlineFriends.map((friend) => {
+          // Get unread count from the centralized context using conversation_id
+          // If conversation_id is not available (not created yet), count is 0
+          const unreadCount = friend.conversation_id 
+            ? (conversationUnreads.get(friend.conversation_id) || 0)
+            : 0;
+
+          return (
+            <OnlineFriendItem
+              key={friend.id}
+              friend={{ ...friend, unread_count: unreadCount }}
+              onClick={() => handleChatOpen(friend)}
+            />
+          );
+        })}
       </div>
     </ScrollArea>
   );

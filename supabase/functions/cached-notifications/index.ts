@@ -6,8 +6,8 @@ const corsHeaders = {
 };
 
 interface RedisCache {
-  get: (key: string) => Promise<any>;
-  set: (key: string, value: any, ttl: number) => Promise<void>;
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown, ttl: number) => Promise<void>;
   del: (key: string) => Promise<void>;
 }
 
@@ -28,7 +28,7 @@ class UpstashRedis implements RedisCache {
     }
   }
 
-  async get(key: string): Promise<any> {
+  async get(key: string): Promise<unknown> {
     if (!this.enabled) return null;
 
     try {
@@ -46,7 +46,7 @@ class UpstashRedis implements RedisCache {
     }
   }
 
-  async set(key: string, value: any, ttl: number): Promise<void> {
+  async set(key: string, value: unknown, ttl: number): Promise<void> {
     if (!this.enabled) return;
 
     try {
@@ -56,7 +56,7 @@ class UpstashRedis implements RedisCache {
           Authorization: `Bearer ${this.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(value),
+        body: JSON.stringify(value as object),
       });
       
       if (!response.ok) {
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     }
 
     // Try to get from cache
-    const cachedData = await redis.get(cacheKey);
+    const cachedData = await redis.get(cacheKey) as { notifications: unknown[]; unreadCount: number; hasMore: boolean; nextOffset: number | null } | null;
     if (cachedData && !bustCache) {
       const elapsed = performance.now() - startTime;
       console.log(`✅ Cache HIT for ${cacheKey} (${elapsed.toFixed(2)}ms)`);
@@ -166,13 +166,17 @@ Deno.serve(async (req) => {
     const senderIds = [...new Set(
       notifications
         ?.map(n => {
-          const meta = n.metadata as any;
-          return meta?.liker_id || meta?.commenter_id || meta?.follower_id || meta?.sender_id;
+          const meta = n.metadata as Record<string, unknown>;
+          const liker = meta?.liker_id as string | undefined;
+          const commenter = meta?.commenter_id as string | undefined;
+          const follower = meta?.follower_id as string | undefined;
+          const sender = meta?.sender_id as string | undefined;
+          return liker || commenter || follower || sender;
         })
         .filter(Boolean)
     )] as string[];
 
-    let senderProfiles: any[] = [];
+    let senderProfiles: { id: string; name: string; username: string; avatar_url: string | null }[] = [];
     if (senderIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
@@ -184,18 +188,17 @@ Deno.serve(async (req) => {
 
     // Enrich notifications with sender info
     const enrichedNotifications = notifications?.map(notification => {
-      const meta = notification.metadata as any;
+      const meta = notification.metadata as Record<string, unknown>;
+      const postId = meta?.post_id as string | undefined;
+      const commentId = meta?.comment_id as string | undefined;
+      const preview = meta?.content_preview as string | undefined;
+      const actorId = (meta?.liker_id || meta?.commenter_id || meta?.follower_id || meta?.sender_id) as string | undefined;
       return {
         ...notification,
-        post_id: meta?.post_id,
-        comment_id: meta?.comment_id,
-        content_preview: meta?.content_preview,
-        sender: senderProfiles.find(p => 
-          p.id === (meta?.liker_id || 
-                   meta?.commenter_id || 
-                   meta?.follower_id ||
-                   meta?.sender_id)
-        )
+        post_id: postId,
+        comment_id: commentId,
+        content_preview: preview,
+        sender: senderProfiles.find(p => p.id === actorId)
       };
     }) || [];
 
