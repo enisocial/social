@@ -1,10 +1,29 @@
 project_id = "tohgxyzfrkzpujkviutj"
 
+# Sécurité : Activer verify_jwt sur toutes les fonctions
+[functions.cached-messages]
+verify_jwt = true
+
+[functions.cached-conversations]
+verify_jwt = true
+
+[functions.cached-unread-messages]
+verify_jwt = true
+
+[functions.cached-live-chat]
+verify_jwt = true
+
+[functions.cached-media]
+verify_jwt = true
+
+[functions.count-unread-messages]
+verify_jwt = true
+
 [functions.increment-stats]
-verify_jwt = false
+verify_jwt = true
 
 [functions.process-notifications]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-push-notification]
-verify_jwt = false
+verify_jwt = true

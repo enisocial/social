@@ -128,32 +128,7 @@ export const FacebookCreatePost = () => {
               .eq('id', post.id);
           }
 
-          // Ajout dans les albums photo si c'est une image
-          if (mediaType === 'image') {
-            try {
-              await supabase.rpc('ensure_system_albums', { user_id_param: user.id });
 
-              const { data: album } = await supabase
-                .from('photo_albums')
-                .select('id')
-                .eq('user_id', user.id)
-                .eq('system_album', 'post_photos')
-                .single();
-
-              if (album) {
-                await supabase.from('photos').insert({
-                  user_id: user.id,
-                  album_id: album.id,
-                  image_url: publicUrl,
-                  caption: content.trim() || null,
-                  privacy: privacy
-                });
-              }
-            } catch (albumError) {
-              console.error('Error adding to album:', albumError);
-              // Non-bloquant, on continue
-            }
-          }
           
           // Progression finale de chaque fichier
           const fileFinalProgress = progressStart + (((i + 1) / totalFiles) * (progressEnd - progressStart));

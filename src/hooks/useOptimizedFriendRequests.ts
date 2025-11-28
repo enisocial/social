@@ -97,61 +97,12 @@ export const useOptimizedFriendRequests = () => {
     staleTime: 60 * 1000, // 1 minute
   });
 
-  // Send friend request with optimistic updates
+  // Send friend request with ultra-fast execution
   const { mutate: sendFriendRequest } = useMutation({
     mutationFn: async (receiverId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
-      
-      // First, check if there is already a request in the other direction (pending)
-      // If so, we should ACCEPT it instead of sending a new one (or let the UI handle it, but let's be safe)
-      const { data: existingReceived } = await supabase
-        .from('friend_requests')
-        .select('id, status')
-        .eq('sender_id', receiverId)
-        .eq('receiver_id', user.id)
-        .maybeSingle();
 
-      if (existingReceived) {
-        if (existingReceived.status === 'pending') {
-          // Auto-accept the request
-          const { error: acceptError } = await supabase
-            .from('friend_requests')
-            .update({ status: 'accepted' })
-            .eq('id', existingReceived.id);
-          
-          if (acceptError) throw acceptError;
-          return 'accepted'; // Return a flag
-        } else if (existingReceived.status === 'accepted') {
-          return 'already_friends';
-        }
-      }
-
-      // Check if we already sent one
-      const { data: existingSent } = await supabase
-        .from('friend_requests')
-        .select('id, status')
-        .eq('sender_id', user.id)
-        .eq('receiver_id', receiverId)
-        .maybeSingle();
-
-      if (existingSent) {
-        if (existingSent.status === 'pending') return 'already_sent';
-        if (existingSent.status === 'accepted') return 'already_friends';
-        // If rejected, we might want to allow resending or not. For now, let's try inserting and let DB decide or update.
-        // Actually, RLS usually allows insert. Unique constraint will fail.
-        // We should update if it exists but was rejected/cancelled? Or delete and insert?
-        // friend_requests has UNIQUE(sender, receiver).
-        // If rejected, we probably want to update status to pending.
-        const { error: updateError } = await supabase
-          .from('friend_requests')
-          .update({ status: 'pending' })
-          .eq('id', existingSent.id);
-        
-        if (updateError) throw updateError;
-        return 'sent';
-      }
-
-      // Insert new request
+      // Ultra-fast: Try to insert directly first (most common case)
       const { error } = await supabase
         .from('friend_requests')
         .insert({
@@ -160,19 +111,52 @@ export const useOptimizedFriendRequests = () => {
           status: 'pending'
         });
 
-      if (error) {
-        // Check for duplicate key error code (Postgres 23505)
-        if (error.code === '23505') {
-           return 'already_sent';
-        }
-        throw error;
+      if (!error) {
+        return 'sent';
       }
-      return 'sent';
+
+      // If insert failed, check what happened (duplicate or other error)
+      if (error.code === '23505') {
+        // Duplicate key - check existing relationship
+        const { data: existing } = await supabase
+          .from('friend_requests')
+          .select('id, status, sender_id, receiver_id')
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${user.id})`)
+          .maybeSingle();
+
+        if (!existing) return 'error';
+
+        if (existing.status === 'accepted') return 'already_friends';
+        if (existing.status === 'pending') {
+          if (existing.sender_id === user.id) return 'already_sent';
+          if (existing.sender_id === receiverId) {
+            // They sent us a request - auto-accept
+            await supabase
+              .from('friend_requests')
+              .update({ status: 'accepted' })
+              .eq('id', existing.id);
+            return 'accepted';
+          }
+        }
+
+        // If rejected/cancelled, allow resending
+        if (existing.sender_id === user.id) {
+          await supabase
+            .from('friend_requests')
+            .update({ status: 'pending' })
+            .eq('id', existing.id);
+          return 'sent';
+        }
+      }
+
+      throw error;
     },
     onSuccess: (result) => {
+      // Ultra-fast cache updates
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
       queryClient.invalidateQueries({ queryKey: ['friends'] });
-      
+
+      // Immediate UI feedback
       if (result === 'accepted') {
         toast.success('Vous êtes maintenant amis !');
       } else if (result === 'already_friends') {
@@ -183,9 +167,41 @@ export const useOptimizedFriendRequests = () => {
         toast.success('Demande envoyée');
       }
     },
-    onError: (error: any) => {
-      console.error('Error sending friend request:', error);
-      toast.error(`Erreur: ${error.message || 'Impossible d\'envoyer la demande'}`);
+    // Optimistic updates for instant UI feedback
+    onMutate: async (receiverId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['friend-requests', 'sent', user?.id] });
+
+      // Snapshot previous value
+      const previousSent = queryClient.getQueryData(['friend-requests', 'sent', user?.id]);
+
+      // Optimistically update to show pending request
+      queryClient.setQueryData(['friend-requests', 'sent', user?.id], (old: any) => {
+        if (!old) return old;
+        return [...old, {
+          id: `temp-${Date.now()}`,
+          sender_id: user?.id,
+          receiver_id: receiverId,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          receiver: { id: receiverId, name: 'Loading...', username: 'loading' }
+        }];
+      });
+
+      return { previousSent };
+    },
+    onError: (err, receiverId, context) => {
+      console.error('Error sending friend request:', err);
+      toast.error('Erreur lors de l\'envoi de la demande');
+
+      // Rollback on error
+      if (context?.previousSent) {
+        queryClient.setQueryData(['friend-requests', 'sent', user?.id], context.previousSent);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after mutation
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
     }
   });
 

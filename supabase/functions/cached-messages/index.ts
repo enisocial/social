@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1';
 import { corsHeaders } from '../_shared/cors.ts';
 import { redis } from '../_shared/redis.ts';
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -38,30 +38,40 @@ Deno.serve(async (req) => {
     const cacheKey = `messages:v1:${conversationId}:${limit}:${offset}`;
     const cacheTTL = 30; // 30 seconds (messages change frequently)
 
-    // Bust cache if requested
+    // Bust cache if requested (only if Redis is enabled)
     if (bustCache) {
-      await redis.del(cacheKey);
-      console.log('🗑️ Cache busted for', cacheKey);
+      try {
+        await redis.del(cacheKey);
+        console.log('🗑️ Cache busted for', cacheKey);
+      } catch (redisError) {
+        console.log('⚠️ Redis unavailable for cache busting');
+      }
     }
 
-    // Try to get from cache
-    const cachedData = await redis.get(cacheKey) as { messages: unknown[]; hasMore: boolean } | null;
+    // Try to get from cache (only if Redis is enabled)
+    let cachedData = null;
+    try {
+      cachedData = await redis.get(cacheKey) as { messages: unknown[]; hasMore: boolean } | null;
+    } catch (redisError) {
+      console.log('⚠️ Redis unavailable, proceeding without cache');
+    }
+
     if (cachedData && !bustCache) {
       const elapsed = performance.now() - startTime;
       console.log(`✅ Cache HIT for ${cacheKey} (${elapsed.toFixed(2)}ms)`);
-      
+
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           ...cachedData,
           cached: true,
           performance: { queryTime: elapsed, cacheHit: true }
         }),
-        { 
-          headers: { 
-            ...corsHeaders, 
+        {
+          headers: {
+            ...corsHeaders,
             'Content-Type': 'application/json',
             'X-Cache': 'HIT',
-          } 
+          }
         }
       );
     }
@@ -103,10 +113,14 @@ Deno.serve(async (req) => {
       hasMore: messages && messages.length === limit,
     };
 
-    // Store in cache (non-blocking)
-    redis.set(cacheKey, responseData, cacheTTL).catch(err => 
-      console.error('Failed to cache messages:', err)
-    );
+    // Store in cache (non-blocking, only if Redis is enabled)
+    try {
+      redis.set(cacheKey, responseData, cacheTTL).catch(err =>
+        console.error('Failed to cache messages:', err)
+      );
+    } catch (redisError) {
+      console.log('⚠️ Redis unavailable, skipping cache storage');
+    }
 
     return new Response(
       JSON.stringify({ 

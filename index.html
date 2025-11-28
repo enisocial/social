@@ -2,50 +2,42 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-    
-    <!-- Primary Meta Tags -->
-    <title>Social - Réseau Social</title>
-    <meta name="title" content="Social - Réseau Social" />
-    <meta name="description" content="Connectez-vous avec vos amis, partagez vos moments et découvrez du contenu inspirant sur Social, votre réseau social de l'Afrique">
-    <meta name="author" content="Social" />
-    <meta name="keywords" content="réseau social, amis, partage, stories, messages, communauté">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    
-    <!-- PWA Meta Tags -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Connectez-vous avec vos amis et partagez vos moments - Réseau social moderne et sécurisé" />
     <meta name="theme-color" content="#8B5CF6" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Social" />
-    
+
+    <!-- Sécurité CSP -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.vercel-insights.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https://*.supabase.co https://cdn.mcmovement.org.za;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://cdn.mcmovement.org.za;
+      media-src 'self' blob: https://*.supabase.co;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      frame-ancestors 'none';
+    ">
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://b1894adb-8667-4b24-898a-262927a8296d.lovableproject.com/" />
-    
-    
-    <meta property="og:image" content="https://b1894adb-8667-4b24-898a-262927a8296d.lovableproject.com/og-image.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="Social" />
-    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://social-app.com" />
+    <meta property="og:title" content="Social - Réseau Social" />
+    <meta property="og:description" content="Connectez-vous avec vos amis et partagez vos moments" />
+    <meta property="og:image" content="/og-image.png" />
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="https://b1894adb-8667-4b24-898a-262927a8296d.lovableproject.com/" />
-    
-    
-    <meta name="twitter:image" content="https://b1894adb-8667-4b24-898a-262927a8296d.lovableproject.com/og-image.png" />
-    <meta property="og:title" content="Social - Réseau Social">
-  <meta name="twitter:title" content="Social - Réseau Social">
-  <meta property="og:description" content="Connectez-vous avec vos amis, partagez vos moments et découvrez du contenu inspirant sur Social, votre réseau social de l&#39;Afrique">
-  <meta name="twitter:description" content="Connectez-vous avec vos amis, partagez vos moments et découvrez du contenu inspirant sur Social, votre réseau social de l&#39;Afrique">
-</head>
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://social-app.com" />
+    <meta property="twitter:title" content="Social - Réseau Social" />
+    <meta property="twitter:description" content="Connectez-vous avec vos amis et partagez vos moments" />
+    <meta property="twitter:image" content="/og-image.png" />
 
+    <title>Social - Réseau Social</title>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

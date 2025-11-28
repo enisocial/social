@@ -121,8 +121,8 @@ const Messages = () => {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-semibold">{user.name}</p>
-                          <p className="text-sm text-muted-foreground">@{user.username}</p>
+                          <p className="font-semibold">{user?.name}</p>
+                          <p className="text-sm text-muted-foreground">@{user?.username}</p>
                         </div>
                       </div>
                     </Card>
@@ -168,28 +168,30 @@ const Messages = () => {
           /** LISTE DES CONVERSATIONS */
           <div className="space-y-2">
             {filteredConversations.map((conv) => {
-              const other = conv.otherUser || {};
+              const other = conv.otherUser || { id: "", name: "", username: "", avatar_url: null };
               return (
                 <div
                   key={conv.id}
                   className="p-4 cursor-pointer hover:bg-accent/50 rounded-xl bg-card border border-border"
-                  onClick={() =>
+                  onClick={() => {
+                    console.log('👆 Clic sur conversation depuis Messages:', other.name, 'ID:', conv.id);
+                    // UTILISER LE VRAI ID DE CONVERSATION
                     openBubble(conv.id, {
-                      id: other.id || "",
-                      name: other.name || "",
-                      username: other.username || "",
-                      avatar_url: other.avatar_url || null,
-                    })
-                  }
+                      id: other.id,
+                      name: other.name,
+                      username: other.username,
+                      avatar_url: other.avatar_url,
+                    });
+                  }}
                 >
                   <div className="flex items-center gap-3">
 
                     {/* AVATAR */}
                     <div className="relative">
                       <Avatar className="w-14 h-14 border-2 border-primary/20">
-                        <AvatarImage src={other.avatar_url || ''} />
+                        <AvatarImage src={other?.avatar_url || ''} />
                         <AvatarFallback>
-                          {other.name?.[0]?.toUpperCase() || "?"}
+                          {other?.name?.[0]?.toUpperCase() || "?"}
                         </AvatarFallback>
                       </Avatar>
 
@@ -204,7 +206,7 @@ const Messages = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="font-semibold truncate">
-                          {other.name || "Utilisateur supprimé"}
+                          {other?.name || "Utilisateur supprimé"}
                         </h3>
 
                         {conv.lastMessage && (

@@ -1,89 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1';
+import { corsHeaders } from '../_shared/cors.ts';
+import { redis } from '../_shared/redis.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-interface RedisCache {
-  get: (key: string) => Promise<any>;
-  set: (key: string, value: any, ttl: number) => Promise<void>;
-  del: (key: string) => Promise<void>;
-}
-
-class UpstashRedis implements RedisCache {
-  private baseUrl: string;
-  private token: string;
-  private enabled: boolean;
-
-  constructor() {
-    this.baseUrl = Deno.env.get('UPSTASH_REDIS_REST_URL') || '';
-    this.token = Deno.env.get('UPSTASH_REDIS_REST_TOKEN') || '';
-    this.enabled = !!(this.baseUrl && this.token);
-    
-    if (this.enabled) {
-      console.log('✅ Redis cache enabled');
-    } else {
-      console.log('⚠️ Redis cache disabled - will use direct DB queries');
-    }
-  }
-
-  async get(key: string): Promise<any> {
-    if (!this.enabled) return null;
-
-    try {
-      const response = await fetch(`${this.baseUrl}/get/${key}`, {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-
-      if (!response.ok) return null;
-
-      const data = await response.json();
-      return data.result ? JSON.parse(data.result) : null;
-    } catch (error) {
-      console.error('Redis GET error:', error);
-      return null;
-    }
-  }
-
-  async set(key: string, value: any, ttl: number): Promise<void> {
-    if (!this.enabled) return;
-
-    try {
-      const response = await fetch(`${this.baseUrl}/setex/${key}/${ttl}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(value),
-      });
-      
-      if (!response.ok) {
-        console.error('Redis SET failed:', response.status);
-      }
-    } catch (error) {
-      console.error('Redis SET error:', error);
-    }
-  }
-
-  async del(key: string): Promise<void> {
-    if (!this.enabled) return;
-
-    try {
-      await fetch(`${this.baseUrl}/del/${key}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-    } catch (error) {
-      console.error('Redis DEL error:', error);
-    }
-  }
-}
-
-const redis = new UpstashRedis();
-
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -107,99 +26,200 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
+    const { filterType = 'recommended', pageSize = 10, offset = 0 } = await req.json();
+
     const url = new URL(req.url);
-    const filter = url.searchParams.get('filter') || 'recommended';
-    const limit = parseInt(url.searchParams.get('limit') || '15');
-    const offset = parseInt(url.searchParams.get('offset') || '0');
     const bustCache = url.searchParams.get('bustCache') === 'true';
-    
-    const cacheKey = `feed:v3:${user.id}:${filter}:${limit}:${offset}`;
-    const cacheTTL = 600; // 10 minutes (increased from 2)
+
+    const cacheKey = `feed:v2:${user.id}:${filterType}:${pageSize}:${offset}`;
+    const cacheTTL = 120; // 2 minutes pour le feed
 
     // Bust cache if requested
     if (bustCache) {
-      await redis.del(cacheKey);
-      console.log('🗑️ Cache busted for', cacheKey);
+      try {
+        await redis.del(cacheKey);
+        console.log('🗑️ Cache busted for', cacheKey);
+      } catch (redisError) {
+        console.log('⚠️ Redis unavailable for cache busting');
+      }
     }
 
-    // Try to get from cache
-    const cachedData = await redis.get(cacheKey);
+    // Try to get from cache first
+    let cachedData = null;
+    try {
+      cachedData = await redis.get(cacheKey) as any;
+    } catch (redisError) {
+      console.log('⚠️ Redis unavailable, proceeding without cache');
+    }
+
     if (cachedData && !bustCache) {
       const elapsed = performance.now() - startTime;
-      console.log(`✅ Cache HIT for ${cacheKey} (${elapsed.toFixed(2)}ms)`);
-      
+      console.log(`✅ Feed CACHE HIT for ${cacheKey} (${elapsed.toFixed(2)}ms)`);
+
       return new Response(
-        JSON.stringify({ 
-          data: cachedData, 
+        JSON.stringify({
+          ...cachedData,
           cached: true,
           performance: { queryTime: elapsed, cacheHit: true }
         }),
-        { 
-          headers: { 
-            ...corsHeaders, 
+        {
+          headers: {
+            ...corsHeaders,
             'Content-Type': 'application/json',
             'X-Cache': 'HIT',
-            'X-Cache-Key': cacheKey,
-          } 
+          }
         }
       );
     }
 
-    console.log(`⏳ Cache MISS for ${cacheKey} - fetching from DB`);
+    console.log(`⏳ Feed CACHE MISS for ${cacheKey} - fetching from DB`);
 
-    // Use optimized RPC function
-    const { data, error } = await supabase.rpc('get_smart_feed_optimized', {
-      user_id_param: user.id,
-      filter_type: filter,
-      limit_param: limit,
-      offset_param: offset,
-    });
+    // Build query based on filter type
+    let postsQuery = supabase
+      .from('posts')
+      .select(`
+        *,
+        profiles!posts_user_id_fkey(username, name, avatar_url),
+        post_media(id, media_url, media_type, order_index),
+        post_tags(
+          id,
+          tagged_user_id,
+          tagged_user:profiles!post_tags_tagged_user_id_fkey(id, name, username, avatar_url)
+        )
+      `)
+      .eq('privacy', 'public')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    // Apply filters
+    if (filterType === 'friends') {
+      const { data: friendships } = await supabase
+        .from('friend_requests')
+        .select('sender_id, receiver_id')
+        .eq('status', 'accepted')
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+      const friendIds = friendships?.map(fr =>
+        fr.sender_id === user.id ? fr.receiver_id : fr.sender_id
+      ).filter(id => id !== user.id) || [];
+
+      if (friendIds.length > 0) {
+        postsQuery = postsQuery.in('user_id', friendIds);
+      }
     }
 
+    const { data: rawPosts, error: postsError } = await postsQuery;
+
+    if (postsError) {
+      console.error('❌ Posts query error:', postsError);
+      throw postsError;
+    }
+
+    if (!rawPosts || rawPosts.length === 0) {
+      const responseData = { posts: [], nextOffset: null };
+      return new Response(
+        JSON.stringify({
+          ...responseData,
+          cached: false,
+          performance: { queryTime: performance.now() - startTime, cacheHit: false }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Cache': 'MISS' } }
+      );
+    }
+
+    // Get likes and comments counts efficiently
+    const postIds = rawPosts.map(p => p.id);
+
+    const [likesData, commentsData, userLikesData] = await Promise.all([
+      supabase.from('likes').select('post_id', { count: 'exact' }).in('post_id', postIds),
+      supabase.from('comments').select('post_id', { count: 'exact' }).in('post_id', postIds),
+      supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', user.id)
+    ]);
+
+    // Process statistics
+    const likesCount: Record<string, number> = {};
+    const commentsCount: Record<string, number> = {};
+    const userLikedSet = new Set<string>();
+
+    likesData.data?.forEach(like => {
+      likesCount[like.post_id] = (likesCount[like.post_id] || 0) + 1;
+    });
+
+    commentsData.data?.forEach(comment => {
+      commentsCount[comment.post_id] = (commentsCount[comment.post_id] || 0) + 1;
+    });
+
+    userLikesData.data?.forEach(like => userLikedSet.add(like.post_id));
+
+    // Transform posts
+    const posts = rawPosts.map(post => ({
+      id: post.id,
+      content: post.content || '',
+      media_url: post.media_url,
+      media_type: post.media_type,
+      privacy: post.privacy || 'public',
+      created_at: post.created_at,
+      updated_at: post.updated_at,
+      user_id: post.user_id,
+      username: post.profiles?.username || 'unknown',
+      name: post.profiles?.name || 'Unknown User',
+      avatar_url: post.profiles?.avatar_url || null,
+      likes_count: likesCount[post.id] || 0,
+      comments_count: commentsCount[post.id] || 0,
+      shares_count: 0,
+      views_count: 0,
+      user_liked: userLikedSet.has(post.id),
+      relevance_score: 0,
+      engagement_prediction: 0,
+      final_score: 0,
+      post_media: post.post_media || [],
+      post_tags: post.post_tags || []
+    }));
+
     const elapsed = performance.now() - startTime;
-    console.log(`✅ DB query completed in ${elapsed.toFixed(2)}ms, storing in cache`);
+    console.log(`✅ Feed DB query completed in ${elapsed.toFixed(2)}ms, storing in cache`);
+
+    const responseData = {
+      posts,
+      nextOffset: posts.length === pageSize ? offset + pageSize : null
+    };
 
     // Store in cache (non-blocking)
-    redis.set(cacheKey, data, cacheTTL).catch(err => 
-      console.error('Failed to cache data:', err)
-    );
+    try {
+      redis.set(cacheKey, responseData, cacheTTL).catch(err =>
+        console.error('Failed to cache feed:', err)
+      );
+    } catch (redisError) {
+      console.log('⚠️ Redis unavailable, skipping cache storage');
+    }
 
     return new Response(
-      JSON.stringify({ 
-        data, 
+      JSON.stringify({
+        ...responseData,
         cached: false,
         performance: { queryTime: elapsed, cacheHit: false }
       }),
-      { 
-        headers: { 
-          ...corsHeaders, 
+      {
+        headers: {
+          ...corsHeaders,
           'Content-Type': 'application/json',
           'X-Cache': 'MISS',
-          'X-Cache-Key': cacheKey,
           'X-Query-Time': `${elapsed.toFixed(2)}ms`,
-        } 
+        }
       }
     );
   } catch (error) {
     const elapsed = performance.now() - startTime;
-    console.error('❌ Error:', error);
-    
+    console.error('❌ Feed error:', error);
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown error',
         performance: { queryTime: elapsed }
       }),
-      { 
-        status: 500, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json',
-          'X-Query-Time': `${elapsed.toFixed(2)}ms`,
-        } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }

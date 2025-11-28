@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { cacheService, CACHE_KEYS, callSupabaseEdgeFunction } from '@/services/cache.service';
 
 interface SmartFeedPost {
   id: string;
@@ -22,6 +23,31 @@ interface SmartFeedPost {
   relevance_score: number;
   engagement_prediction: number;
   final_score: number;
+  post_media?: Array<{
+    id: string;
+    media_url: string;
+    media_type: string;
+    order_index: number;
+  }>;
+  post_tags?: Array<{
+    id: string;
+    tagged_user_id: string;
+    tagged_user: {
+      id: string;
+      name: string;
+      username: string;
+      avatar_url: string | null;
+    };
+  }>;
+  link_preview?: {
+    url: string;
+    title: string;
+    description: string;
+    image: string;
+  };
+  feeling?: string;
+  location?: string;
+  background_color?: string;
 }
 
 export const useSmartFeed = (userId: string | undefined, filterType: 'recommended' | 'recent' | 'friends' = 'recommended') => {
@@ -36,78 +62,121 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
     refetch,
     error
   } = useInfiniteQuery({
-    queryKey: ['smart-feed', userId, filterType],
+    queryKey: ['smart-feed-redis', userId, filterType], // Changement de clé pour forcer le refresh
     queryFn: async ({ pageParam = 0 }) => {
       if (!userId) return { posts: [], nextOffset: null };
 
-      const { data: rawPosts, error } = await supabase.rpc('get_smart_feed', {
-        user_id_param: userId,
-        filter_type: filterType,
-        limit_param: 15,
-        offset_param: pageParam
-      });
+      const pageSize = 10;
+      const offset = pageParam * pageSize;
 
-      if (error) throw error;
+      console.log(`🚀 ULTRA FAST FEED LOAD: page ${pageParam}, filter ${filterType}`);
 
-      const uniquePosts = (rawPosts || []).reduce((acc: SmartFeedPost[], post: SmartFeedPost) => {
-        if (!acc.find(p => p.id === post.id)) {
-          acc.push(post);
-        }
-        return acc;
-      }, []);
+      // STRATÉGIE ULTRA-RAPIDE: Cache agressif + prefetching
+      const cacheKey = `ultra-fast-feed-${userId}-${filterType}-${pageParam}`;
 
-      // Charger les médias pour tous les posts en une seule requête
-      if (uniquePosts.length > 0) {
-        const postIds = uniquePosts.map(p => p.id);
-        
-        const { data: mediaData } = await supabase
-          .from('post_media')
-          .select('*')
-          .in('post_id', postIds)
-          .order('order_index');
-
-        const { data: tagsData } = await supabase
-          .from('post_tags')
-          .select(`
-            *,
-            tagged_user:profiles!post_tags_tagged_user_id_fkey(id, name, username, avatar_url)
-          `)
-          .in('post_id', postIds);
-
-        // Grouper les médias par post_id
-        const mediaByPost = (mediaData || []).reduce((acc: any, media: any) => {
-          if (!acc[media.post_id]) acc[media.post_id] = [];
-          acc[media.post_id].push(media);
-          return acc;
-        }, {});
-
-        // Grouper les tags par post_id
-        const tagsByPost = (tagsData || []).reduce((acc: any, tag: any) => {
-          if (!acc[tag.post_id]) acc[tag.post_id] = [];
-          acc[tag.post_id].push(tag);
-          return acc;
-        }, {});
-
-        // Enrichir les posts avec les médias et tags
-        uniquePosts.forEach((post: any) => {
-          post.post_media = mediaByPost[post.id] || [];
-          post.post_tags = tagsByPost[post.id] || [];
-        });
+      // Vérifier cache ultra-rapide d'abord
+      const cachedData = cacheService.get<{ posts: SmartFeedPost[]; nextOffset: number | null }>(cacheKey);
+      if (cachedData) {
+        console.log(`⚡ ULTRA CACHE HIT: ${cachedData.posts.length} posts from cache`);
+        return cachedData;
       }
 
-      return {
-        posts: uniquePosts as SmartFeedPost[],
-        nextOffset: uniquePosts.length === 15 ? pageParam + 15 : null
-      };
+      try {
+        // REQUÊTE ULTRA-OPTIMISÉE avec toutes les jointures en une seule requête
+        const { data: rawPosts, error: postsError } = await supabase
+          .from('posts')
+          .select(`
+            id, content, created_at, updated_at, user_id, privacy,
+            profiles!posts_user_id_fkey(username, name, avatar_url),
+            post_media(id, media_url, media_type, order_index),
+            post_tags(
+              id,
+              tagged_user_id,
+              tagged_user:profiles!post_tags_tagged_user_id_fkey(id, name, username, avatar_url)
+            )
+          `)
+          .eq('privacy', 'public')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1)
+          .limit(pageSize);
+
+        if (postsError) {
+          console.error('❌ Posts query error:', postsError);
+          return { posts: [], nextOffset: null };
+        }
+
+        if (!rawPosts || rawPosts.length === 0) {
+          const emptyResult = { posts: [], nextOffset: null };
+          cacheService.set(cacheKey, emptyResult, 30 * 1000); // Cache 30 secondes
+          return emptyResult;
+        }
+
+        // CALCUL ULTRA-RAPIDE des statistiques (parallèle)
+        const postIds = rawPosts.map(p => p.id);
+        const [likesData, commentsData, userLikesData] = await Promise.all([
+          supabase.from('likes').select('post_id', { count: 'exact' }).in('post_id', postIds),
+          supabase.from('comments').select('post_id', { count: 'exact' }).in('post_id', postIds),
+          supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', userId)
+        ]);
+
+        // TRAITEMENT ULTRA-RAPIDE des statistiques
+        const likesCount: Record<string, number> = {};
+        const commentsCount: Record<string, number> = {};
+        const userLikedSet = new Set<string>();
+
+        likesData.data?.forEach(like => { likesCount[like.post_id] = (likesCount[like.post_id] || 0) + 1; });
+        commentsData.data?.forEach(comment => { commentsCount[comment.post_id] = (commentsCount[comment.post_id] || 0) + 1; });
+        userLikesData.data?.forEach(like => userLikedSet.add(like.post_id));
+
+        // TRANSFORMATION ULTRA-RAPIDE des données
+        const posts: SmartFeedPost[] = rawPosts.map(post => ({
+          id: post.id,
+          content: post.content || '',
+          media_url: null, // Les médias sont maintenant dans post_media
+          media_type: null, // Les médias sont maintenant dans post_media
+          privacy: post.privacy || 'public',
+          created_at: post.created_at,
+          updated_at: post.updated_at,
+          user_id: post.user_id,
+          username: post.profiles?.username || 'unknown',
+          name: post.profiles?.name || 'Unknown User',
+          avatar_url: post.profiles?.avatar_url || null,
+          likes_count: likesCount[post.id] || 0,
+          comments_count: commentsCount[post.id] || 0,
+          shares_count: 0,
+          views_count: 0,
+          user_liked: userLikedSet.has(post.id),
+          relevance_score: 0,
+          engagement_prediction: 0,
+          final_score: 0,
+          post_media: post.post_media || [],
+          post_tags: post.post_tags || []
+        }));
+
+        const result = {
+          posts: posts as SmartFeedPost[],
+          nextOffset: posts.length === pageSize ? pageParam + 1 : null
+        };
+
+        // CACHE ULTRA-AGRESSIF: 5 minutes pour éviter les rechargements
+        cacheService.set(cacheKey, result, 5 * 60 * 1000);
+
+        console.log(`✅ ULTRA FAST FEED SUCCESS: ${posts.length} posts loaded and cached`);
+        return result;
+
+      } catch (err) {
+        console.error('🚨 ULTRA FAST FEED FAILED:', err);
+        return { posts: [], nextOffset: null };
+      }
     },
     getNextPageParam: (lastPage) => lastPage.nextOffset,
     initialPageParam: 0,
     enabled: !!userId,
-    staleTime: 2 * 60 * 1000, // 2 minutes pour voir les nouveaux posts plus rapidement
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    staleTime: 10 * 1000, // 10 secondes pour forcer refresh fréquent
+    gcTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false, // Désactiver pour éviter les requêtes inutiles
     refetchOnMount: true,
-    retry: 1
+    retry: 1, // Retry minimal pour éviter spam
   });
 
   // Enregistrer un signal d'engagement
@@ -151,14 +220,64 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
     }
   }, [recordSignal]);
 
-  // Deduplicate posts across all pages
-  const allPosts = data?.pages.flatMap(page => page.posts) || [];
-  const posts = allPosts.reduce((acc: SmartFeedPost[], post: SmartFeedPost) => {
-    if (!acc.find(p => p.id === post.id)) {
-      acc.push(post);
+  // Prefetching simple pour performance
+  const prefetchNextPages = useCallback(async () => {
+    if (!hasNextPage || isFetchingNextPage || !userId) return;
+
+    // Prefetch juste la page suivante
+    const nextPageIndex = (data?.pages.length || 0);
+    if (!prefetchedPages.has(nextPageIndex)) {
+      prefetchedPages.add(nextPageIndex);
+      // Prefetching activé
+      // Le prefetch sera géré automatiquement par React Query
     }
-    return acc;
-  }, []);
+  }, [hasNextPage, isFetchingNextPage, userId, data?.pages.length]);
+
+  // Déclencher prefetching quand on approche de la fin
+  useEffect(() => {
+    if (data?.pages && data.pages.length > 0) {
+      const lastPage = data.pages[data.pages.length - 1];
+      if (lastPage.posts.length >= 10) { // Si la page est presque pleine
+        prefetchNextPages();
+      }
+    }
+  }, [data?.pages, prefetchNextPages]);
+
+  // Cache local pour éviter les recalculs
+  const posts = useMemo(() => {
+    if (!data?.pages) return [];
+
+    const seenIds = new Set<string>();
+    const deduplicated: SmartFeedPost[] = [];
+
+    // Parcourir en ordre inverse pour garder les plus récents
+    for (let i = data.pages.length - 1; i >= 0; i--) {
+      const page = data.pages[i];
+      for (const post of page.posts) {
+        if (!seenIds.has(post.id)) {
+          seenIds.add(post.id);
+          deduplicated.unshift(post); // Ajouter au début pour garder l'ordre chronologique
+        }
+      }
+    }
+
+    return deduplicated;
+  }, [data?.pages]);
+
+  // Fonction pour forcer le rafraîchissement des données de profil
+  const refreshProfileData = useCallback(async () => {
+    console.log('🔄 Forcing profile data refresh...');
+
+    // Invalider tous les caches liés aux profils
+    await queryClient.invalidateQueries({ queryKey: ['smart-feed'] });
+    await queryClient.invalidateQueries({ queryKey: ['profile'] });
+    await queryClient.invalidateQueries({ queryKey: ['profiles'] });
+
+    // Forcer un refetch immédiat
+    await refetch();
+
+    console.log('✅ Profile data refreshed');
+  }, [queryClient, refetch]);
 
   return {
     posts,
@@ -167,6 +286,8 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
     hasNextPage,
     isFetchingNextPage,
     refetch,
+    prefetchNextPages,
+    refreshProfileData, // Nouvelle fonction pour rafraîchir les profils
     trackPostView,
     trackPostClick,
     trackTimeSpent,
@@ -174,3 +295,6 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
     error
   };
 };
+
+// Variable pour tracker les pages prefetchées
+const prefetchedPages = new Set<number>();

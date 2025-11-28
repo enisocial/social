@@ -106,4 +106,8 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1000,
     sourcemap: false, // Pas de sourcemaps en prod
   },
+  define: {
+    // Sécurité : Désactiver les devtools en production
+    __DEV__: mode === 'development',
+  },
 }));

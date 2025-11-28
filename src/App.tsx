@@ -1,9 +1,9 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { ThemeProvider } from "next-themes";
 import { PageTransition } from "@/components/PageTransition";
@@ -12,7 +12,8 @@ import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { UserProtectedRoute } from "@/components/UserProtectedRoute";
 import { UnreadProvider } from "@/contexts/UnreadContext";
 import { MessengerProvider } from "@/contexts/MessengerContext";
-import { ChatBubbleManager } from "@/components/messenger/ChatBubbleManager";
+import { supabase } from "@/integrations/supabase/client";
+
 import { RoutePreloader } from "@/components/RoutePreloader";
 
 // Lazy load pages for better performance
@@ -21,9 +22,14 @@ const Feed = lazy(() => import("./pages/Feed"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Messages = lazy(() => import("./pages/Messages"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const Profile = lazy(() => import("./pages/Profile"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const Admin = lazy(() => import("./pages/AdminDashboardNew"));
+const AdminUserManagement = lazy(() => import("./pages/AdminUserManagement"));
+const AdminModeration = lazy(() => import("./pages/AdminModeration"));
+const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics"));
+const AdminSystem = lazy(() => import("./pages/AdminSystem"));
+const AdminHelpCenter = lazy(() => import("./pages/admin/AdminHelpCenter"));
 const Moderator = lazy(() => import("./pages/ModeratorDashboard"));
 const Settings = lazy(() => import("./pages/Settings"));
 const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
@@ -42,8 +48,15 @@ const Explore = lazy(() => import("./pages/Explore"));
 const LiveStreams = lazy(() => import("./pages/LiveStreams"));
 const LiveStreamDetail = lazy(() => import("./pages/LiveStreamDetail"));
 const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
-const TermsOfService = lazy(() => import("./pages/TermsOfService"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/Terms"));
+const PrivacyPolicy = lazy(() => import("./pages/Privacy"));
+const Help = lazy(() => import("./pages/Help"));
+const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
+const GeolocationTest = lazy(() => import("./components/GeolocationTest"));
+const Albums = lazy(() => import("./pages/Albums"));
+const Events = lazy(() => import("./pages/Events"));
+const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
+const VideoTest = lazy(() => import("./pages/VideoTest"));
 
 // OPTIMIZED QueryClient - Balanced speed + resilience
 const queryClient = new QueryClient({
@@ -97,6 +110,29 @@ const LoadingFallback = () => (
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  console.log('AnimatedRoutes rendering:', {
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash
+  });
+
+  // SYSTEM ADMIN AUTO-REDIRECT - admin@binkaa.com is system administrator
+  useEffect(() => {
+    const checkSystemAdminRedirect = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email === 'admin@binkaa.com') {
+        // System admin should NEVER access normal user pages
+        if (location.pathname === '/feed' || location.pathname === '/explore' || location.pathname === '/' || location.pathname === '/auth') {
+          console.log('🔑 SYSTEM ADMIN DETECTED - redirecting to admin dashboard');
+          navigate('/admin-dashboard', { replace: true });
+        }
+      }
+    };
+
+    checkSystemAdminRedirect();
+  }, [location.pathname, navigate]);
 
   return (
     <AnimatePresence mode="wait">
@@ -106,19 +142,26 @@ function AnimatedRoutes() {
           <Route path="/feed" element={<PageTransition><UserProtectedRoute><Feed /></UserProtectedRoute></PageTransition>} />
           <Route path="/explore" element={<PageTransition><UserProtectedRoute><Explore /></UserProtectedRoute></PageTransition>} />
           <Route path="/auth" element={<PageTransition><Auth /></PageTransition>} />
+          <Route path="/help" element={<PageTransition><Help /></PageTransition>} />
           <Route path="/terms" element={<PageTransition><TermsOfService /></PageTransition>} />
           <Route path="/privacy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><UserProtectedRoute><Notifications /></UserProtectedRoute></PageTransition>} />
           <Route path="/messages" element={<PageTransition><UserProtectedRoute><Messages /></UserProtectedRoute></PageTransition>} />
           <Route path="/messages/:conversationId" element={<Navigate to="/messages" replace />} />
-          <Route path="/profile/:username" element={<PageTransition><UserProtectedRoute><ProfilePage /></UserProtectedRoute></PageTransition>} />
-          <Route path="/profile/:userId" element={<PageTransition><UserProtectedRoute><ProfilePage /></UserProtectedRoute></PageTransition>} />
+          <Route path="/profile/:username" element={<PageTransition><UserProtectedRoute><Profile /></UserProtectedRoute></PageTransition>} />
+          <Route path="/profile/:userId" element={<PageTransition><UserProtectedRoute><Profile /></UserProtectedRoute></PageTransition>} />
           <Route path="/post/:postId" element={<PageTransition><PostDetail /></PageTransition>} />
           <Route path="/admin-dashboard" element={<PageTransition><AdminProtectedRoute><Admin /></AdminProtectedRoute></PageTransition>} />
           <Route path="/admin" element={<PageTransition><AdminProtectedRoute><Admin /></AdminProtectedRoute></PageTransition>} />
+          <Route path="/admin/users" element={<PageTransition><AdminProtectedRoute><AdminUserManagement /></AdminProtectedRoute></PageTransition>} />
+          <Route path="/admin/moderation" element={<PageTransition><AdminProtectedRoute><AdminModeration /></AdminProtectedRoute></PageTransition>} />
+          <Route path="/admin/analytics" element={<PageTransition><AdminProtectedRoute><AdminAnalytics /></AdminProtectedRoute></PageTransition>} />
+          <Route path="/admin/system" element={<PageTransition><AdminProtectedRoute><AdminSystem /></AdminProtectedRoute></PageTransition>} />
+          <Route path="/admin/help" element={<PageTransition><AdminProtectedRoute><AdminHelpCenter /></AdminProtectedRoute></PageTransition>} />
           <Route path="/moderator" element={<PageTransition><ProtectedRoute requiredRole="both"><Moderator /></ProtectedRoute></PageTransition>} />
           <Route path="/settings" element={<PageTransition><UserProtectedRoute><Settings /></UserProtectedRoute></PageTransition>} />
           <Route path="/settings/notifications" element={<PageTransition><UserProtectedRoute><NotificationSettings /></UserProtectedRoute></PageTransition>} />
+          <Route path="/complete-profile" element={<PageTransition><UserProtectedRoute><CompleteProfile /></UserProtectedRoute></PageTransition>} />
           <Route path="/analytics" element={<PageTransition><UserProtectedRoute><Analytics /></UserProtectedRoute></PageTransition>} />
           <Route path="/find-friends" element={<PageTransition><UserProtectedRoute><FindFriends /></UserProtectedRoute></PageTransition>} />
           <Route path="/friends" element={<PageTransition><UserProtectedRoute><Friends /></UserProtectedRoute></PageTransition>} />
@@ -132,8 +175,13 @@ function AnimatedRoutes() {
           <Route path="/lives" element={<PageTransition><UserProtectedRoute><LiveStreams /></UserProtectedRoute></PageTransition>} />
           <Route path="/live-streams" element={<Navigate to="/live" replace />} />
           <Route path="/live/:streamId" element={<PageTransition><UserProtectedRoute><LiveStreamDetail /></UserProtectedRoute></PageTransition>} />
+          <Route path="/albums" element={<PageTransition><UserProtectedRoute><Albums /></UserProtectedRoute></PageTransition>} />
           <Route path="/albums/:albumId" element={<PageTransition><UserProtectedRoute><AlbumDetail /></UserProtectedRoute></PageTransition>} />
+          <Route path="/events" element={<PageTransition><UserProtectedRoute><Events /></UserProtectedRoute></PageTransition>} />
+          <Route path="/privacy-settings" element={<PageTransition><UserProtectedRoute><PrivacySettings /></UserProtectedRoute></PageTransition>} />
+          <Route path="/video-test" element={<PageTransition><UserProtectedRoute><VideoTest /></UserProtectedRoute></PageTransition>} />
           <Route path="/install" element={<PageTransition><Install /></PageTransition>} />
+          <Route path="/geolocation-test" element={<PageTransition><UserProtectedRoute><GeolocationTest /></UserProtectedRoute></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
       </Suspense>
@@ -145,17 +193,16 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <TooltipProvider>
-        <UnreadProvider>
-          <MessengerProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
+        <BrowserRouter>
+          <UnreadProvider>
+            <MessengerProvider>
+              <Toaster />
+              <Sonner />
               <RoutePreloader />
               <AnimatedRoutes />
-              <ChatBubbleManager />
-            </BrowserRouter>
-          </MessengerProvider>
-        </UnreadProvider>
+            </MessengerProvider>
+          </UnreadProvider>
+        </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

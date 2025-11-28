@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { debounce } from '@/utils/performance';
 import { checkRateLimit } from '@/utils/rate-limit.utils';
+import { OptimizedMediaWithCache } from '@/components/ui/OptimizedMediaWithCache';
 
 interface ChatBubbleProps {
   conversationId: string;
@@ -46,8 +47,17 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
   const previousMessageCountRef = useRef(0);
 
   const { user } = useAuth();
-  const { closeBubble, toggleMinimize, clearUnread } = useMessenger();
+  const { closeBubble, toggleMinimize, clearUnread } = useMessenger() || {};
   const isMobile = useIsMobile();
+
+  // Fallback functions for missing context methods
+  const safeToggleMinimize = useCallback((id: string) => {
+    if (toggleMinimize) toggleMinimize(id);
+  }, [toggleMinimize]);
+
+  const safeClearUnread = useCallback((id: string) => {
+    if (clearUnread) clearUnread(id);
+  }, [clearUnread]);
 
   // Optimized typing handler
   const debouncedSetTyping = useMemo(() => debounce((isTyping: boolean) => setTyping(isTyping), 500), [setTyping]);
@@ -74,7 +84,6 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
   // Reset unread immediately when chat opens
   useEffect(() => {
     if (isMinimized) return;
-    clearUnread(conversationId);
 
     if (!loading && messages.length > 0) {
       const unreadMessages = messages.filter(m => m.sender_id !== user?.id && !m.read).map(m => m.id);
@@ -83,12 +92,27 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
         return () => clearTimeout(timer);
       }
     }
-  }, [conversationId, messages, loading, isMinimized, user, clearUnread, markAsRead]);
+  }, [conversationId, messages, loading, isMinimized, user, markAsRead]);
 
   // Send / Edit message handler
   const handleSendMessage = useCallback(async () => {
+    console.log('🎯 [CHATBUBBLE] handleSendMessage called with:', {
+      messageText,
+      hasFile: !!selectedFile,
+      sending
+    });
+
     const textToSend = messageText.trim();
-    if ((!textToSend && !selectedFile) || sending) return;
+
+    // Vérification plus souple - permettre l'envoi si on a du texte OU un fichier
+    if (!textToSend && !selectedFile) {
+      console.log('🚫 [CHATBUBBLE] No content to send, returning');
+      return;
+    }
+    if (sending) {
+      console.log('⏳ [CHATBUBBLE] Already sending, returning');
+      return;
+    }
 
     if (editingMessage) {
       await editMessage(editingMessage.id, textToSend);
@@ -124,18 +148,26 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
       setUploading(false);
     }
 
+    // Nettoyer l'état avant envoi
+    const textToSendFinal = textToSend;
+    const attachmentToSend = attachmentData;
+    const replyToId = replyingTo?.id;
+
     setMessageText('');
     setSelectedFile(null);
     setReplyingTo(null);
     debouncedSetTyping(false);
 
     try {
-      await sendMessage(textToSend || `📎 ${selectedFile?.name}`, attachmentData, replyingTo?.id);
+      await sendMessage(textToSendFinal || `📎 ${selectedFile?.name}`, attachmentToSend, replyToId);
     } catch (err) {
-      setMessageText(textToSend);
+      console.error('Erreur envoi message:', err);
+      // Restaurer l'état en cas d'erreur
+      setMessageText(textToSendFinal);
       if (selectedFile) setSelectedFile(selectedFile);
+      if (replyToId) setReplyingTo(messages.find(m => m.id === replyToId) || null);
     }
-  }, [messageText, selectedFile, sending, editingMessage, user, sendMessage, replyingTo, editMessage, debouncedSetTyping]);
+  }, [messageText, selectedFile, sending, editingMessage, user, sendMessage, replyingTo, editMessage, debouncedSetTyping, messages, conversationId]);
 
   const handleTextChange = useCallback((value: string) => {
     setMessageText(value);
@@ -179,7 +211,7 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
   if (isMinimized && !isMobile) {
     return (
       <button
-        onClick={() => toggleMinimize(conversationId)}
+        onClick={() => safeToggleMinimize(conversationId)}
         className="w-[60px] h-[60px] bg-card border-2 border-primary shadow-lg rounded-full overflow-hidden hover:scale-105 transition-transform fixed z-50"
         style={{ right: `${20 + position * 70}px`, bottom: '20px' }}
       >
@@ -230,7 +262,7 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {!isMobile && <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-background/60 transition-colors" onClick={() => toggleMinimize(conversationId)}><Minus className="h-4 w-4" /></Button>}
+          {!isMobile && <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-background/60 transition-colors" onClick={() => safeToggleMinimize(conversationId)}><Minus className="h-4 w-4" /></Button>}
           <Button variant="ghost" size="icon" className={`hover:bg-destructive/10 hover:text-destructive transition-colors ${isMobile ? 'h-9 w-9' : 'h-8 w-8'}`} onClick={() => closeBubble(conversationId)}><X className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} /></Button>
         </div>
       </div>
@@ -251,9 +283,33 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
                       {replyToMessage && <div className={`text-xs mb-1 pl-2 border-l-2 ${isOwn ? 'border-primary' : 'border-accent'} opacity-70 max-w-full`}><p className="truncate">↩ {replyToMessage.content}</p></div>}
                       <div className={`rounded-2xl px-2.5 py-1.5 inline-block max-w-full ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}`}>
                         {message.attachment_url && <div className="mb-1">
-                          {message.attachment_type?.startsWith('image/') ? <img src={message.attachment_url} alt={message.attachment_name || ''} className="rounded max-w-[140px] h-auto max-h-24 object-cover cursor-pointer block" onClick={() => window.open(message.attachment_url, '_blank')} />
-                          : message.attachment_type?.startsWith('video/') ? <video src={message.attachment_url} controls className="rounded max-w-[140px] max-h-24 block" />
-                          : <a href={message.attachment_url} target="_blank" rel="noopener noreferrer" className="text-xs underline flex items-center gap-1"><Paperclip className="h-3 w-3 flex-shrink-0" /><span className="truncate max-w-[100px]">{message.attachment_name}</span></a>}
+                          {message.attachment_type?.startsWith('image/') ? (
+                            <OptimizedMediaWithCache
+                              src={message.attachment_url}
+                              alt={message.attachment_name || 'Image partagée'}
+                              type="image"
+                              aspectRatio="auto"
+                              quality="medium"
+                              className="rounded max-w-[140px] h-auto max-h-24 cursor-pointer"
+                              onClick={() => window.open(message.attachment_url, '_blank')}
+                            />
+                          ) : message.attachment_type?.startsWith('video/') ? (
+                            <OptimizedMediaWithCache
+                              src={message.attachment_url}
+                              alt={message.attachment_name || 'Vidéo partagée'}
+                              type="video"
+                              aspectRatio="video"
+                              showControls={false}
+                              muted={true}
+                              autoPlay={false}
+                              className="rounded max-w-[140px] max-h-24"
+                            />
+                          ) : (
+                            <a href={message.attachment_url} target="_blank" rel="noopener noreferrer" className="text-xs underline flex items-center gap-1">
+                              <Paperclip className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate max-w-[100px]">{message.attachment_name}</span>
+                            </a>
+                          )}
                         </div>}
                         <p className="text-sm break-words">{message.content}{message.edited && <span className="text-xs opacity-50 ml-1">(modifié)</span>}</p>
                         <div className="flex items-center justify-between mt-1 gap-2">

@@ -6,7 +6,7 @@ import { debounce, throttle } from '@/utils/performance';
 import { checkRateLimit } from '@/utils/rate-limit.utils';
 import { performanceMonitor, errorTracker } from '@/utils/monitoring.utils';
 
-import { cacheService } from '@/services/cache.service';
+import { cacheService, CACHE_KEYS, callSupabaseEdgeFunction } from '@/services/cache.service';
 
 export interface Message {
   id: string;
@@ -48,31 +48,30 @@ export const useMessenger = (conversationId: string) => {
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const otherUserIdRef = useRef<string | null>(null);
 
-  // --- Fetch messages with Redis RPC fallback ---
+  // --- ULTRA FAST MESSAGES LOAD ---
   const fetchMessages = useCallback(async () => {
     if (!conversationId) return;
     setLoading(true);
-    
+
+    // STRATÉGIE ULTRA-RAPIDE: Cache agressif d'abord
+    const cacheKey = `ultra-fast-messages-${conversationId}`;
+    const cachedMessages = cacheService.get<Message[]>(cacheKey);
+
+    if (cachedMessages) {
+      setMessages(cachedMessages);
+      setLoading(false);
+      return;
+    }
+
     try {
       await performanceMonitor.measureAsync('fetchMessages', async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Try cache first (via Supabase Function + Redis)
-        try {
-          const { data: cached, error } = await supabase.functions.invoke('cached-messages', {
-            body: { conversationId, limit: 100 }
-          });
-          if (!error && cached?.messages) {
-            setMessages(cached.messages as Message[]);
-            setLoading(false);
-            return;
-          }
-        } catch {}
-
-        // Fallback to DB query
-        const { data: msgs, error: msgErr } = await supabase
+        // REQUÊTE ULTRA-OPTIMISÉE: Une seule requête avec toutes les jointures
+        const { data: rawMessages, error: msgError } = await supabase
           .from('messages')
           .select(`
             *,
@@ -85,19 +84,80 @@ export const useMessenger = (conversationId: string) => {
           `)
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: true })
-          .limit(100);
+          .limit(50);
 
-        if (msgErr) throw msgErr;
+        if (msgError) {
+          console.error('❌ Messages query error:', msgError);
+          setMessages([]);
+          return;
+        }
 
-        setMessages(msgs as Message[]);
+        if (!rawMessages || rawMessages.length === 0) {
+          const emptyMessages: Message[] = [];
+          cacheService.set(cacheKey, emptyMessages, 30 * 1000); // Cache 30 secondes
+          setMessages(emptyMessages);
+          return;
+        }
+
+        // TRANSFORMATION ULTRA-RAPIDE des données
+        const messages: Message[] = rawMessages.map((msg: any) => ({
+          id: msg.id,
+          conversation_id: msg.conversation_id,
+          sender_id: msg.sender_id,
+          content: msg.content,
+          created_at: msg.created_at,
+          read: msg.read || false,
+          attachment_url: msg.attachment_url,
+          attachment_type: msg.attachment_type,
+          attachment_name: msg.attachment_name,
+          reply_to: msg.reply_to,
+          edited: msg.edited || false,
+          reactions: msg.reactions,
+          pinned_by: msg.pinned_by,
+          pinned_at: msg.pinned_at,
+          sender: msg.sender || {
+            id: msg.sender_id,
+            name: 'Unknown',
+            username: '',
+            avatar_url: null
+          },
+          status: msg.status
+        }));
+
+        // CACHE ULTRA-AGRESSIF: 2 minutes pour éviter les rechargements
+        cacheService.set(cacheKey, messages, 2 * 60 * 1000);
+
+        setMessages(messages);
+
       }, { conversationId });
     } catch (err) {
-      console.error('Fetch messages error:', err);
+      console.error('🚨 ULTRA FAST MESSAGES FAILED:', err);
       errorTracker.track(err as Error, { context: 'fetchMessages', conversationId });
+      setMessages([]);
     } finally {
       setLoading(false);
     }
   }, [conversationId]);
+
+  // CHARGER LA PRÉSENCE INITIALE DE L'AUTRE UTILISATEUR
+  const loadOtherUserPresence = useCallback(async (otherUserId: string) => {
+    try {
+      const { data: presence } = await supabase
+        .from('user_presence')
+        .select('is_online, last_seen')
+        .eq('user_id', otherUserId)
+        .single();
+
+      if (presence) {
+        setOtherUserPresence(prev => ({
+          ...prev,
+          online: (presence as any).is_online || false
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur chargement présence:', error);
+    }
+  }, []);
 
   // --- Setup Realtime subscription ---
   const setupRealtime = useCallback(async () => {
@@ -105,7 +165,14 @@ export const useMessenger = (conversationId: string) => {
     if (!user || !conversationId) return;
 
     // Presence: mark user online
-    await supabase.rpc('update_user_presence', { p_user_id: user.id, p_online: true });
+    try {
+      await supabase.rpc('update_user_presence', {
+        p_user_id: user.id,
+        p_online: true
+      });
+    } catch (error) {
+      console.error('Failed to mark user online:', error);
+    }
 
     // Get other user ID
     const { data: participant } = await supabase
@@ -117,6 +184,35 @@ export const useMessenger = (conversationId: string) => {
       .single();
 
     const otherUserId = participant?.user_id;
+
+    // Stocker l'ID pour les fonctions de nettoyage
+    otherUserIdRef.current = otherUserId;
+
+    if (otherUserId) {
+      // Charger la présence initiale
+      await loadOtherUserPresence(otherUserId);
+
+      // ÉCOUTER LES CHANGEMENTS DE PRÉSENCE DANS LA TABLE user_presence
+      // Cela permet de synchroniser avec les déconnexions complètes
+      const presenceChannel = supabase
+        .channel(`presence-sync-${conversationId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'user_presence',
+          filter: `user_id=eq.${otherUserId}`
+        }, (payload) => {
+          const presence = payload.new as any;
+          if (presence) {
+            const isOnline = presence.is_online || false;
+            setOtherUserPresence(prev => ({
+              ...prev,
+              online: isOnline
+            }));
+          }
+        })
+        .subscribe();
+    }
 
     // Subscribe to messages
     const channel = supabase.channel(`conversation-${conversationId}`, { config: { broadcast: { self: false }, presence: { key: user.id } } });
@@ -198,8 +294,122 @@ export const useMessenger = (conversationId: string) => {
     channelRef.current = channel;
   }, [conversationId]);
 
+  // ÉCOUTER LES CHANGEMENTS D'AUTHENTIFICATION POUR NETTOYER LES ABONNEMENTS
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // UNIQUEMENT nettoyer lors d'une vraie déconnexion, pas lors d'autres changements
+      if (event === 'SIGNED_OUT') {
+        console.log('🚪 [LOGOUT] User signed out, forcing presence update immediately');
+
+        // FORCER IMMÉDIATEMENT la mise à jour du statut de présence
+        // Les autres utilisateurs verront le changement via les canaux globaux
+        setOtherUserPresence({ online: false, typing: false });
+
+        // Vérification AGRESSIVE du statut de présence (toutes les 2 secondes pendant 30 secondes)
+        let checkCount = 0;
+        const aggressivePresenceCheck = setInterval(async () => {
+          try {
+            checkCount++;
+            if (otherUserIdRef.current) {
+              const { data: presenceCheck } = await supabase
+                .from('user_presence')
+                .select('is_online, last_seen')
+                .eq('user_id', otherUserIdRef.current)
+                .single();
+
+              if (presenceCheck) {
+                const isOnline = (presenceCheck as any).is_online || false;
+                console.log(`🔄 [LOGOUT] Aggressive presence check ${checkCount}:`, { userId: otherUserIdRef.current, isOnline });
+                setOtherUserPresence(prev => ({
+                  ...prev,
+                  online: isOnline
+                }));
+              }
+            }
+
+            // Arrêter après 15 vérifications (30 secondes)
+            if (checkCount >= 15) {
+              clearInterval(aggressivePresenceCheck);
+              console.log('✅ [LOGOUT] Aggressive presence checking stopped');
+            }
+          } catch (error) {
+            console.error('Error in aggressive presence check:', error);
+          }
+        }, 2000); // Toutes les 2 secondes
+
+        // Nettoyer après un délai pour permettre la propagation
+        setTimeout(async () => {
+          console.log('🧹 [LOGOUT] Starting cleanup after propagation delay');
+
+          // 1. Nettoyer les abonnements
+          if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
+          }
+
+          // 2. Nettoyer les timeouts
+          if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+          }
+
+          // 3. Nettoyer le cache des messages pour éviter les données obsolètes
+          if (conversationId) {
+            const cacheKey = `ultra-fast-messages-${conversationId}`;
+            cacheService.delete(cacheKey);
+          }
+
+          console.log('✅ [LOGOUT] Cleanup completed');
+        }, 1000); // Réduire à 1 seconde
+
+        // Nettoyer l'intervalle quand l'effet se termine
+        return () => {
+          clearInterval(aggressivePresenceCheck);
+        };
+
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [conversationId]);
+
+  // ÉCOUTER LES CHANGEMENTS GLOBAUX DE PRÉSENCE POUR SYNCHRONISATION TEMPS RÉEL
+  useEffect(() => {
+    if (!conversationId || !otherUserIdRef.current) return;
+
+    console.log('🌐 Setting up global presence listener for user:', otherUserIdRef.current);
+
+    const globalPresenceChannel = supabase
+      .channel(`global-presence-${conversationId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'user_presence',
+        filter: `user_id=eq.${otherUserIdRef.current}`
+      }, (payload) => {
+        const presence = payload.new as any;
+        if (presence) {
+          const isOnline = presence.is_online || false;
+          console.log('🔄 Global presence update received:', { userId: otherUserIdRef.current, isOnline });
+          setOtherUserPresence(prev => ({
+            ...prev,
+            online: isOnline
+          }));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      console.log('🧹 Cleaning up global presence listener');
+      supabase.removeChannel(globalPresenceChannel);
+    };
+  }, [conversationId]);
+
   useEffect(() => {
     if (!conversationId) return;
+
     fetchMessages();
     setupRealtime();
 
@@ -207,12 +417,36 @@ export const useMessenger = (conversationId: string) => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [conversationId, fetchMessages, setupRealtime]);
+  }, [conversationId]);
+
+  // METTRE À JOUR LE CACHE APRÈS L'ENVOI RÉUSSI D'UN MESSAGE
+  // Cela garantit que les nouveaux messages sont sauvegardés
+  const prevSendingRef = useRef(sending);
+  useEffect(() => {
+    // Détecter quand sending passe de true à false (envoi terminé)
+    if (prevSendingRef.current && !sending && conversationId) {
+      const cacheKey = `ultra-fast-messages-${conversationId}`;
+      const realMessages = messages.filter(m => !m.id.startsWith('temp-'));
+      if (realMessages.length > 0) {
+        cacheService.set(cacheKey, realMessages, 2 * 60 * 1000);
+      }
+    }
+    prevSendingRef.current = sending;
+  }, [sending, messages, conversationId]);
+
+
 
   // --- Send message with optimistic update ---
   const sendMessage = useCallback(async (content: string, attachment?: { url: string; type: string; name: string }, replyToId?: string) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !conversationId) return;
+    if (!user) {
+      console.error('Pas d\'utilisateur authentifié');
+      return;
+    }
+    if (!conversationId) {
+      console.error('Pas d\'ID de conversation');
+      return;
+    }
 
     setSending(true);
 

@@ -18,6 +18,8 @@ import { usePostReactions } from '@/hooks/usePostReactions';
 import { EditPostDialog } from '../EditPostDialog';
 import { PostStats } from './PostStats';
 import { AutoplayVideo } from '../AutoplayVideo';
+import { OptimizedMediaWithCache } from '@/components/ui/OptimizedMediaWithCache';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,9 +31,22 @@ import { useQuery } from '@tanstack/react-query';
 interface EnhancedPostCardProps {
   post: any;
   onDelete?: () => void;
+  onView?: (postId: string) => void;
+  onClick?: (postId: string) => void;
+  onTimeSpent?: (postId: string, seconds: number) => void;
+  onReaction?: (postId: string) => void;
+  priority?: boolean;
 }
 
-const EnhancedPostCardComponent = ({ post, onDelete }: EnhancedPostCardProps) => {
+const EnhancedPostCardComponent = ({
+  post,
+  onDelete,
+  onView,
+  onClick,
+  onTimeSpent,
+  onReaction,
+  priority = false
+}: EnhancedPostCardProps) => {
   const { user } = useAuth();
   const { reactions, userReaction, totalCount, toggleReaction } = usePostReactions(post.id, user?.id);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,8 +54,12 @@ const EnhancedPostCardComponent = ({ post, onDelete }: EnhancedPostCardProps) =>
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharePostDialogOpen, setSharePostDialogOpen] = useState(false);
   const [reactionsDialogOpen, setReactionsDialogOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [hasTrackedView, setHasTrackedView] = useState(false);
+  const viewStartTime = useRef<number>(0);
 
   // ✅ OPTIMISATION: Utiliser directement les données déjà chargées (pas de requêtes supplémentaires)
+  // Les médias et tags sont déjà chargés par useSmartFeed, pas besoin de requêtes supplémentaires
   const postMedia = useMemo(() => post.post_media || [], [post.post_media]);
   const postTags = useMemo(() => post.post_tags || [], [post.post_tags]);
 
@@ -52,6 +71,47 @@ const EnhancedPostCardComponent = ({ post, onDelete }: EnhancedPostCardProps) =>
 
   const likesCount = post.likes_count ?? post.likes?.length ?? 0;
   const commentsCount = post.comments_count ?? post.comments?.length ?? 0;
+
+  // Track view quand le post est visible
+  useEffect(() => {
+    if (!cardRef.current || !user || hasTrackedView) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            // Post devient visible
+            viewStartTime.current = Date.now();
+            if (!hasTrackedView && onView) {
+              onView(post.id);
+              setHasTrackedView(true);
+            }
+          } else if (viewStartTime.current > 0) {
+            // Post n'est plus visible, calculer le temps passé
+            const timeSpent = Math.floor((Date.now() - viewStartTime.current) / 1000);
+            if (onTimeSpent && timeSpent > 0) {
+              onTimeSpent(post.id, timeSpent);
+            }
+            viewStartTime.current = 0;
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(cardRef.current);
+
+    return () => {
+      // Cleanup: enregistrer le temps final si applicable
+      if (viewStartTime.current > 0 && onTimeSpent) {
+        const timeSpent = Math.floor((Date.now() - viewStartTime.current) / 1000);
+        if (timeSpent > 0) {
+          onTimeSpent(post.id, timeSpent);
+        }
+      }
+      observer.disconnect();
+    };
+  }, [user, hasTrackedView, onView, onTimeSpent, post.id]);
 
   // ✅ OPTIMISATION: Memoizer handleDelete
   const handleDelete = useCallback(async () => {
@@ -76,7 +136,7 @@ const EnhancedPostCardComponent = ({ post, onDelete }: EnhancedPostCardProps) =>
   }, [user, post.user_id, post.id, onDelete]);
 
   return (
-    <Card className="overflow-hidden">
+    <Card ref={cardRef} className="overflow-hidden">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
         <div className="flex items-start gap-3">
           <Link to={`/profile/${post.user_id}`}>
@@ -153,41 +213,63 @@ const EnhancedPostCardComponent = ({ post, onDelete }: EnhancedPostCardProps) =>
           </div>
         )}
 
-        {/* Media Grid */}
+        {/* Media Grid - Ultra optimisé avec OptimizedMedia */}
         {postMedia && postMedia.length > 0 && !post.background_color && (
-          <div className={`grid gap-1 ${
+          <div className={`grid gap-2 ${
             postMedia.length === 1 ? 'grid-cols-1' :
             postMedia.length === 2 ? 'grid-cols-2' :
-            postMedia.length === 3 ? 'grid-cols-3' :
+            postMedia.length === 3 ? 'grid-cols-2' :
             postMedia.length === 4 ? 'grid-cols-2' :
             'grid-cols-3'
           }`}>
-            {postMedia.map((media, idx) => (
-              <div 
-                key={media.id} 
-                className={`relative rounded-lg overflow-hidden bg-muted ${
-                  postMedia.length === 1 ? 'aspect-video' :
-                  postMedia.length === 3 && idx === 0 ? 'col-span-3 aspect-video' :
-                  'aspect-square'
-                }`}
-              >
-                {media.media_type === 'video' ? (
-                  <AutoplayVideo 
-                    src={media.media_url} 
-                    className="h-full object-cover rounded-lg"
-                  />
-                ) : (
-                  <img 
-                    src={media.media_url} 
-                    alt="" 
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover cursor-pointer"
-                    onClick={() => window.open(media.media_url, '_blank')}
-                  />
-                )}
+            {postMedia.slice(0, 6).map((media, idx) => {
+              // Déterminer l'aspect ratio selon le nombre et position
+              let aspectRatio: 'square' | 'video' | 'portrait' | 'auto' = 'square';
+              // ULTRA PRIORITÉ: Tous les médias des posts prioritaires chargent immédiatement
+              let mediaPriority = priority;
+
+              if (postMedia.length === 1) {
+                aspectRatio = media.media_type === 'video' ? 'video' : 'auto';
+              } else if (postMedia.length === 3 && idx === 0) {
+                aspectRatio = 'video'; // Premier média en format vidéo pour 3 médias
+              }
+
+              // Vérifier que l'URL du média est valide
+              const mediaUrl = media.media_url;
+              if (!mediaUrl || mediaUrl.trim() === '') {
+                console.warn('⚠️ Média sans URL valide:', media);
+                return null;
+              }
+
+              console.log('📸 Affichage média:', { id: media.id, url: mediaUrl, type: media.media_type, priority: mediaPriority });
+
+              return (
+                <OptimizedMediaWithCache
+                  key={`${media.id}-${idx}`}
+                  src={mediaUrl}
+                  alt={`Média de ${profile.name}`}
+                  type={media.media_type === 'video' ? 'video' : 'image'}
+                  aspectRatio={aspectRatio}
+                  priority={mediaPriority}
+                  quality="medium"
+                  showControls={media.media_type === 'video'}
+                  autoPlay={media.media_type === 'video'} // Lecture automatique pour les vidéos
+                  muted={true}
+                  className={cn(
+                    postMedia.length === 3 && idx === 0 ? 'col-span-2 row-span-2' : '',
+                    postMedia.length > 6 && idx === 5 ? 'relative' : ''
+                  )}
+                  onClick={() => media.media_type !== 'video' && window.open(mediaUrl, '_blank')}
+                />
+              );
+            }).filter(Boolean)}
+
+            {/* Indicateur pour plus de médias */}
+            {postMedia.length > 6 && (
+              <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm font-medium">
+                +{postMedia.length - 6}
               </div>
-            ))}
+            )}
           </div>
         )}
 

@@ -26,7 +26,7 @@ export const EditAboutDialog = ({ open, onOpenChange, profile, section, onSucces
     birthdate: profile?.birthdate || '',
     work: profile?.work || '',
     education: profile?.education || '',
-    public_email: profile?.public_email || '',
+    email: profile?.email || '',
     phone: profile?.phone || '',
     website: profile?.website || '',
   });
@@ -37,22 +37,24 @@ export const EditAboutDialog = ({ open, onOpenChange, profile, section, onSucces
 
     try {
       const updates: any = {};
-      
+
       if (section === 'bio') {
-        updates.bio = formData.bio;
+        updates.bio = formData.bio.trim() || null;
       } else if (section === 'general') {
-        updates.current_city = formData.current_city;
-        updates.hometown = formData.hometown;
-        updates.relationship_status = formData.relationship_status;
-        updates.birthdate = formData.birthdate;
+        updates.current_city = formData.current_city.trim() || null;
+        updates.hometown = formData.hometown.trim() || null;
+        updates.relationship_status = formData.relationship_status.trim() || null;
+        updates.birthdate = formData.birthdate || null;
       } else if (section === 'work') {
-        updates.work = formData.work;
-        updates.education = formData.education;
+        updates.work = formData.work.trim() || null;
+        updates.education = formData.education.trim() || null;
       } else if (section === 'contact') {
-        updates.public_email = formData.public_email;
-        updates.phone = formData.phone;
-        updates.website = formData.website;
+        updates.email = formData.email.trim() || null;
+        updates.phone = formData.phone.trim() || null;
+        updates.website = formData.website.trim() || null;
       }
+
+      console.log('🎯 EDIT ABOUT - UPDATING:', updates);
 
       const { error } = await supabase
         .from('profiles')
@@ -164,12 +166,12 @@ export const EditAboutDialog = ({ open, onOpenChange, profile, section, onSucces
         return (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="public_email">Email public</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="public_email"
+                id="email"
                 type="email"
-                value={formData.public_email}
-                onChange={(e) => setFormData({ ...formData, public_email: e.target.value })}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="contact@exemple.com"
               />
             </div>

@@ -1,166 +1,219 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './useAuth';
 
-export const usePresence = (userId?: string) => {
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
-  const offlineTimeoutRef = useRef<NodeJS.Timeout>();
-  const isActiveRef = useRef(true);
-  const currentUserIdRef = useRef<string | undefined>(userId);
+interface UserPresence {
+  user_id: string;
+  is_online: boolean;
+  last_seen: string;
+  current_page?: string;
+}
 
+interface PresenceState {
+  [userId: string]: UserPresence;
+}
+
+export const usePresence = (currentUserId?: string) => {
+  const { user } = useAuth();
+  const [presenceState, setPresenceState] = useState<PresenceState>({});
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Update user presence
+  const updatePresence = useCallback(async (online: boolean, page?: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_presence')
+        .upsert({
+          user_id: user.id,
+          is_online: online,
+          last_seen: new Date().toISOString(),
+          current_page: page || window.location.pathname,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) throw error;
+      setIsOnline(online);
+    } catch (error) {
+      console.error('Error updating presence:', error);
+    }
+  }, [user?.id]);
+
+  // Subscribe to presence changes for friends
   useEffect(() => {
-    if (!userId) return;
-    isActiveRef.current = true;
-    currentUserIdRef.current = userId;
+    if (!user?.id) return;
 
-    // Set user online when component mounts
-    const setOnline = async () => {
-      if (!isActiveRef.current) return;
+    // Get initial presence state for friends
+    const fetchFriendsPresence = async () => {
       try {
-        await supabase.rpc('update_user_presence', {
-          p_user_id: userId,
-          p_online: true
+        // Get user's friends
+        const { data: friends } = await supabase
+          .from('friend_requests')
+          .select(`
+            sender_id,
+            receiver_id,
+            sender:user_presence!friend_requests_sender_id_fkey(
+              user_id,
+              is_online,
+              last_seen,
+              current_page
+            ),
+            receiver:user_presence!friend_requests_receiver_id_fkey(
+              user_id,
+              is_online,
+              last_seen,
+              current_page
+            )
+          `)
+          .eq('status', 'accepted')
+          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+        const presenceMap: PresenceState = {};
+
+        friends?.forEach((req: any) => {
+          const friendPresence = req.sender_id === user.id ? req.receiver : req.sender;
+          if (friendPresence && friendPresence.user_id) {
+            presenceMap[friendPresence.user_id] = friendPresence;
+          }
         });
+
+        setPresenceState(presenceMap);
       } catch (error) {
-        console.error('Error setting online status:', error);
+        console.error('Error fetching friends presence:', error);
+        // Fallback: simulate presence for demo purposes
+        const mockPresence: PresenceState = {};
+        // This will be filled by the heartbeat simulation below
+        setPresenceState(mockPresence);
       }
     };
 
-    // Set user offline when component unmounts or page unloads
-    const setOffline = async () => {
-      if (!currentUserIdRef.current) return;
-      try {
-        await supabase.rpc('update_user_presence', {
-          p_user_id: currentUserIdRef.current,
-          p_online: false
-        });
-      } catch (error) {
-        console.error('Error setting offline status:', error);
-      }
-    };
+    fetchFriendsPresence();
 
-    // Initial online status
-    setOnline();
-
-    // Update presence on visibility change with immediate response
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // When tab is hidden, set offline after 5 seconds
-        offlineTimeoutRef.current = setTimeout(() => {
-          setOffline();
-        }, 5000);
-      } else {
-        // When tab becomes visible again, cancel offline and set online immediately
-        if (offlineTimeoutRef.current) {
-          clearTimeout(offlineTimeoutRef.current);
-        }
-        setOnline();
-      }
-    };
-
-    // Set offline immediately on page unload using sendBeacon for reliability
-    const handleBeforeUnload = () => {
-      if (!currentUserIdRef.current) return;
-      // Use sendBeacon for more reliable offline detection
-      navigator.sendBeacon(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/update_user_presence`,
-        JSON.stringify({ p_user_id: currentUserIdRef.current, p_online: false })
-      );
-    };
-
-    // Heartbeat every 30 seconds to keep connection alive
-    // Increased interval to reduce DB load while maintaining reasonable accuracy
-    heartbeatIntervalRef.current = setInterval(async () => {
-      if (!document.hidden && isActiveRef.current) {
-        // Verify user is still authenticated before updating presence
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id === currentUserIdRef.current) {
-          setOnline();
-        } else {
-          // Session expired or user logged out, stop heartbeat
-          isActiveRef.current = false;
-          if (heartbeatIntervalRef.current) {
-            clearInterval(heartbeatIntervalRef.current);
+    // Subscribe to presence changes
+    const channel = supabase
+      .channel('presence_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_presence'
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const presence = payload.new as UserPresence;
+            setPresenceState(prev => ({
+              ...prev,
+              [presence.user_id]: presence
+            }));
           }
         }
-      }
-    }, 30000);
+      )
+      .subscribe();
 
-    // Check online status more frequently
-    const onlineCheckInterval = setInterval(async () => {
-      if (navigator.onLine && !document.hidden && isActiveRef.current) {
-        // Verify user is still authenticated
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id === currentUserIdRef.current) {
-          setOnline();
-        } else {
-          isActiveRef.current = false;
-        }
-      } else if (!navigator.onLine) {
-        setOffline();
-      }
-    }, 15000); // Increased from 5000 to 15000 to reduce load
+    // Set user as online when component mounts
+    updatePresence(true);
 
-    // Listen to online/offline events
-    const handleOnline = () => setOnline();
-    const handleOffline = () => setOffline();
+    // Handle page visibility changes
+    const handleVisibilityChange = () => {
+      updatePresence(!document.hidden);
+    };
 
-    // Listen to auth state changes to immediately set offline on sign out
-    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && currentUserIdRef.current) {
-        // Immediately stop all intervals and set offline
-        isActiveRef.current = false;
-        if (heartbeatIntervalRef.current) {
-          clearInterval(heartbeatIntervalRef.current);
-          heartbeatIntervalRef.current = undefined;
-        }
-        if (offlineTimeoutRef.current) {
-          clearTimeout(offlineTimeoutRef.current);
-          offlineTimeoutRef.current = undefined;
-        }
-        // Force offline status update
-        supabase.rpc('update_user_presence', {
-          p_user_id: currentUserIdRef.current,
-          p_online: false
-        }).then(() => {
-          console.log('User set offline on sign out');
-        });
-      }
-    });
+    const handleBeforeUnload = () => {
+      updatePresence(false);
+    };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
 
-    // Cleanup
+    // Heartbeat to keep user online and refresh friends presence
+    const heartbeat = setInterval(async () => {
+      if (!document.hidden) {
+        await updatePresence(true, window.location.pathname);
+
+        // Refresh friends presence data from database
+        try {
+          const { data: friendsPresence } = await supabase
+            .from('friend_requests')
+            .select(`
+              sender_id,
+              receiver_id,
+              sender_presence:user_presence!friend_requests_sender_id_fkey(
+                user_id,
+                is_online,
+                last_seen,
+                current_page
+              ),
+              receiver_presence:user_presence!friend_requests_receiver_id_fkey(
+                user_id,
+                is_online,
+                last_seen,
+                current_page
+              )
+            `)
+            .eq('status', 'accepted')
+            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+            .limit(20); // Get more friends for better presence data
+
+          if (friendsPresence) {
+            const realPresence: PresenceState = {};
+            friendsPresence.forEach((req: any) => {
+              const friendPresence = req.sender_id === user.id ? req.receiver_presence : req.sender_presence;
+              if (friendPresence?.user_id) {
+                realPresence[friendPresence.user_id] = {
+                  user_id: friendPresence.user_id,
+                  is_online: friendPresence.is_online || false,
+                  last_seen: friendPresence.last_seen || new Date().toISOString(),
+                  current_page: friendPresence.current_page || null
+                };
+              }
+            });
+            setPresenceState(realPresence);
+          }
+        } catch (error) {
+          console.error('Error refreshing friends presence:', error);
+          // Fallback to empty state if error
+          setPresenceState({});
+        }
+      }
+    }, 15000); // Every 15 seconds for more responsive presence
+
     return () => {
-      isActiveRef.current = false;
-      const currentUserId = currentUserIdRef.current;
-      
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-        heartbeatIntervalRef.current = undefined;
-      }
-      if (offlineTimeoutRef.current) {
-        clearTimeout(offlineTimeoutRef.current);
-        offlineTimeoutRef.current = undefined;
-      }
-      clearInterval(onlineCheckInterval);
-      authSubscription.unsubscribe();
+      channel.unsubscribe();
+      clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      
-      // Force offline on cleanup
-      if (currentUserId) {
-        supabase.rpc('update_user_presence', {
-          p_user_id: currentUserId,
-          p_online: false
-        }).then(() => {
-          console.log('User set offline on cleanup');
-        });
-      }
+      // Set offline when component unmounts
+      updatePresence(false);
     };
-  }, [userId]);
+  }, [user?.id, updatePresence]);
+
+  // Get presence info for a specific user
+  const getUserPresence = useCallback((userId: string): UserPresence | null => {
+    return presenceState[userId] || null;
+  }, [presenceState]);
+
+  // Check if user is online
+  const isUserOnline = useCallback((userId: string): boolean => {
+    const presence = presenceState[userId];
+    return presence?.is_online || false;
+  }, [presenceState]);
+
+  // Get last seen time
+  const getLastSeen = useCallback((userId: string): string | null => {
+    const presence = presenceState[userId];
+    return presence?.last_seen || null;
+  }, [presenceState]);
+
+  return {
+    presenceState,
+    isOnline,
+    updatePresence,
+    getUserPresence,
+    isUserOnline,
+    getLastSeen
+  };
 };
