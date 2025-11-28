@@ -7,9 +7,10 @@ import { PostCardSkeleton } from '@/components/PostCardSkeleton';
 import { useSmartFeed } from '@/hooks/useSmartFeed';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const Feed = () => {
   const { user, loading } = useAuth();
@@ -18,6 +19,57 @@ const Feed = () => {
   const [feedMode, setFeedMode] = useState<'recommended' | 'recent' | 'friends'>('recommended');
   const [isFeedReady, setIsFeedReady] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+
+  // Pull-to-refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [startY, setStartY] = useState<number | null>(null);
+  const [canRefresh, setCanRefresh] = useState(false);
+
+  // Pull-to-refresh handlers (mobile only)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || !parentRef.current || parentRef.current.scrollTop > 10) return;
+    setStartY(e.touches[0].clientY);
+  }, [isMobile]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || startY === null || isRefreshing) return;
+
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) { // Only handle downward pulls
+      const distance = Math.min(deltaY * 0.5, 80); // Dampen the pull and cap at 80px
+      setPullDistance(distance);
+      setCanRefresh(distance > 50); // Trigger refresh when pulled 50px
+    }
+  }, [isMobile, startY, isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!isMobile || !canRefresh || isRefreshing) {
+      setPullDistance(0);
+      setStartY(null);
+      setCanRefresh(false);
+      return;
+    }
+
+    // Trigger refresh
+    setIsRefreshing(true);
+    setPullDistance(0);
+    setStartY(null);
+    setCanRefresh(false);
+
+    try {
+      // Invalidate and refetch feed data
+      await queryClient.invalidateQueries({ queryKey: ['smart-feed'] });
+      // Wait a bit for the refresh animation
+      setTimeout(() => setIsRefreshing(false), 1000);
+    } catch (error) {
+      console.error('Refresh error:', error);
+      setIsRefreshing(false);
+    }
+  }, [isMobile, canRefresh, isRefreshing, queryClient]);
 
   const {
     posts,
@@ -87,7 +139,7 @@ const Feed = () => {
     count: isFeedReady ? posts.length : 0,
     getScrollElement: () => parentRef.current,
     estimateSize: getPostSize,
-    overscan: 3, // Réduit pour de meilleures performances
+    overscan: isMobile ? 2 : 3, // Reduced overscan for mobile performance
   });
 
   useEffect(() => {
@@ -138,8 +190,36 @@ const Feed = () => {
         </div>
       </div>
 
+      {/* Pull-to-refresh indicator (mobile only) */}
+      {isMobile && (pullDistance > 0 || isRefreshing) && (
+        <div
+          className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-border flex items-center justify-center py-2 transition-all duration-200"
+          style={{
+            transform: `translateY(${Math.max(-60, pullDistance - 60)}px)`,
+            opacity: pullDistance > 0 ? Math.min(pullDistance / 50, 1) : 1
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <RefreshCw className={`h-5 w-5 text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="text-sm text-muted-foreground">
+              {isRefreshing ? 'Actualisation...' : canRefresh ? 'Lâchez pour actualiser' : 'Tirez pour actualiser'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Posts Feed with Virtual Scrolling */}
-      <div ref={parentRef} className="h-full overflow-auto">
+      <div
+        ref={parentRef}
+        className="h-full overflow-auto"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={isMobile && pullDistance > 0 ? {
+          transform: `translateY(${pullDistance}px)`,
+          transition: 'none'
+        } : {}}
+      >
         {postsLoading && !posts.length ? (
           <div className="space-y-4 p-4">
             {[...Array(2)].map((_, i) => (

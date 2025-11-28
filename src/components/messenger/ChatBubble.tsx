@@ -45,6 +45,10 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousMessageCountRef = useRef(0);
+  const chatBubbleRef = useRef<HTMLDivElement>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [isSwipeClosing, setIsSwipeClosing] = useState(false);
 
   const { user } = useAuth();
   const { closeBubble, toggleMinimize, clearUnread } = useMessenger() || {};
@@ -185,6 +189,37 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
     return () => window.visualViewport?.removeEventListener('resize', handleResize);
   }, [isMobile]);
 
+  // Mobile swipe to close functionality
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    setTouchStartY(e.touches[0].clientY);
+    setTouchStartX(e.touches[0].clientX);
+  }, [isMobile]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || touchStartY === null || touchStartX === null) return;
+
+    const currentY = e.touches[0].clientY;
+    const currentX = e.touches[0].clientX;
+    const deltaY = currentY - touchStartY;
+    const deltaX = Math.abs(currentX - touchStartX);
+
+    // Only handle vertical swipes (down to close)
+    if (deltaY > 50 && deltaX < 30) {
+      setIsSwipeClosing(true);
+    }
+  }, [isMobile, touchStartY, touchStartX]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isMobile || !isSwipeClosing) return;
+
+    // Close the chat bubble on swipe down
+    closeBubble?.(conversationId);
+    setIsSwipeClosing(false);
+    setTouchStartY(null);
+    setTouchStartX(null);
+  }, [isMobile, isSwipeClosing, closeBubble, conversationId]);
+
   const bubbleStyle = useMemo(() => isMobile ? {
     position: 'fixed' as const,
     inset: 0,
@@ -233,9 +268,16 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
 
   // Main ChatBubble render
   return (
-    <div className={`bg-card border shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200 ${
-      isMobile ? 'w-full h-full rounded-none fixed inset-0 border-0' : 'w-[340px] rounded-xl fixed border-border'
-    }`} style={bubbleStyle}>
+    <div
+      ref={chatBubbleRef}
+      className={`bg-card border shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200 ${
+        isMobile ? 'w-full h-full rounded-none fixed inset-0 border-0' : 'w-[340px] rounded-xl fixed border-border'
+      }`}
+      style={bubbleStyle}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Header */}
       <div className={`flex items-center justify-between border-b border-border bg-gradient-to-r from-accent/30 to-accent/50 backdrop-blur-sm ${
         isMobile ? 'p-4 min-h-[64px]' : 'p-3'
@@ -339,7 +381,24 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
               <input ref={fileInputRef} type="file" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) setSelectedFile(file); }} />
               <Button variant="ghost" size="icon" className={isMobile ? 'h-10 w-10 flex-shrink-0' : 'h-8 w-8 flex-shrink-0'} onClick={() => fileInputRef.current?.click()} disabled={uploading || sending}><Paperclip className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} /></Button>
               <input type="text" value={messageText} onChange={e => handleTextChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Aa" className={`flex-1 bg-background border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-primary ${isMobile ? 'px-4 py-3 text-base' : 'px-3 py-1.5 text-sm'}`} disabled={uploading || sending} />
-              <Button size="icon" className={`rounded-full flex-shrink-0 ${isMobile ? 'h-10 w-10' : 'h-8 w-8'}`} onClick={handleSendMessage} disabled={(!messageText.trim() && !selectedFile) || uploading || sending}><Send className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} /></Button>
+              <Button
+                size="icon"
+                className={`rounded-full flex-shrink-0 transition-all duration-200 active:scale-95 ${
+                  isMobile
+                    ? 'h-11 w-11 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl border-2 border-blue-400/30'
+                    : 'h-8 w-8'
+                } ${
+                  (!messageText.trim() && !selectedFile) || uploading || sending
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:scale-105'
+                }`}
+                onClick={handleSendMessage}
+                disabled={(!messageText.trim() && !selectedFile) || uploading || sending}
+              >
+                <Send className={`${isMobile ? 'h-5 w-5' : 'h-4 w-4'} transition-transform duration-200 ${
+                  sending ? 'animate-pulse' : ''
+                }`} />
+              </Button>
             </div>
           </div>
         </>

@@ -31,6 +31,34 @@ export const PERFORMANCE_CONFIG = {
     format: 'webp',
     preload: true,
     cache: true,
+  },
+
+  // Mobile-specific optimizations
+  MOBILE_CONFIG: {
+    // Reduced image quality for mobile to save bandwidth
+    mobileImageQuality: 'medium',
+    // Shorter cache times on mobile due to limited storage
+    mobileCacheTime: 10 * 60 * 1000, // 10 minutes
+    // Fewer concurrent loads on mobile
+    mobileMaxConcurrentLoads: 3,
+    // Smaller preload distance on mobile
+    mobilePreloadDistance: 300,
+    // Touch-friendly interactions
+    touchTargets: {
+      minSize: 44, // Minimum 44px touch targets
+      spacing: 8,  // Minimum 8px spacing
+    },
+    // Pull-to-refresh settings
+    pullToRefresh: {
+      threshold: 50, // pixels to trigger refresh
+      maxDistance: 80, // max pull distance
+      damping: 0.5, // damping factor
+    },
+    // Virtual scrolling optimizations
+    virtualScroll: {
+      overscan: 2, // fewer items for mobile performance
+      estimateSizeBuffer: 50, // smaller buffer
+    },
   }
 };
 
