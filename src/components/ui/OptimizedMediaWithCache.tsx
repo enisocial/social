@@ -221,13 +221,34 @@ const OptimizedVideoWithCache = memo(({
     shouldLoadImmediately
   });
 
-  // CHARGEMENT ULTRA-RAPIDE: Commencer immédiatement - MÊME LOGIQUE QUE LES IMAGES
+  // GESTION SPÉCIALE MOBILE - Force le chargement même sans intersection
+  const isMobileDevice = window.innerWidth < 768 || 'ontouchstart' in window;
+
   useEffect(() => {
-    if (shouldLoadImmediately && videoUrl) {
-      setIsLoading(true);
-      console.log('⚡ STARTING ULTRA FAST LOAD for priority VIDEO');
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (priority) {
+      // Pour les vidéos prioritaires, précharger immédiatement
+      video.preload = 'metadata';
+      video.load();
+    } else if (isVisible) {
+      // Pour les vidéos visibles, charger complètement
+      video.preload = 'auto';
+      video.load();
+    } else if (isNearViewport) {
+      // Pour les vidéos proches de la viewport, précharger les métadonnées
+      video.preload = 'metadata';
+      video.load();
+    } else if (isMobileDevice && !priority) {
+      // SUR MOBILE: Précharger même les vidéos lointaines pour éviter les blocages
+      video.preload = 'metadata';
+      video.load();
+    } else {
+      // Pour les vidéos lointaines sur desktop, preload minimal
+      video.preload = 'none';
     }
-  }, [shouldLoadImmediately, videoUrl]);
+  }, [priority, isVisible, isNearViewport, isMobileDevice]);
 
   const handleLoad = useCallback(() => {
     setIsLoading(false);
@@ -300,7 +321,7 @@ const OptimizedVideoWithCache = memo(({
       )}
 
       {/* Vidéo principale - directe */}
-      {(priority || isVisible) && !hasError && videoUrl && (
+      {(priority || isVisible || (isMobileDevice && isNearViewport)) && !hasError && videoUrl && (
         <video
           ref={videoRef}
           src={videoUrl}

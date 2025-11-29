@@ -16,6 +16,8 @@ import { ReactionsSummary } from './ReactionsSummary';
 import { usePostReactions } from '@/hooks/usePostReactions';
 import { useChatActions } from '@/hooks/useChatActions';
 import { EditPostDialog } from './EditPostDialog';
+import { OptimizedMediaWithCache } from '@/components/ui/OptimizedMediaWithCache';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +71,7 @@ export const SmartPostCard = ({ post, onDelete, onView, onClick, onTimeSpent, on
   const cardRef = useRef<HTMLDivElement>(null);
   const [hasTrackedView, setHasTrackedView] = useState(false);
   const viewStartTime = useRef<number>(0);
+  const isMobile = useIsMobile();
 
   // Track view quand le post est visible
   useEffect(() => {
@@ -138,7 +141,7 @@ export const SmartPostCard = ({ post, onDelete, onView, onClick, onTimeSpent, on
   // Track video view
   const trackVideoView = async () => {
     if (!user || post.media_type !== 'video') return;
-    
+
     try {
       const { error } = await supabase.from('post_views').insert({
         post_id: post.id,
@@ -151,31 +154,6 @@ export const SmartPostCard = ({ post, onDelete, onView, onClick, onTimeSpent, on
       // Ignore duplicate key errors
     }
   };
-
-  // Autoplay video when in viewport
-  useEffect(() => {
-    if (!videoRef.current || post.media_type !== 'video') return;
-
-    const videoElement = videoRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            videoElement.play().catch(() => {});
-          } else {
-            videoElement.pause();
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
-
-    observer.observe(videoElement);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [post.media_type]);
 
   return (
     <Card ref={cardRef} className="hover-lift shadow-md border-border/50" onClick={handleCardClick}>
@@ -262,38 +240,29 @@ export const SmartPostCard = ({ post, onDelete, onView, onClick, onTimeSpent, on
         
         {post.media_url && (
           <div className="relative rounded-lg overflow-hidden bg-black">
-            {post.media_type === 'image' ? (
-              <img 
-                src={post.media_url} 
-                alt="Post media" 
-                className="w-full object-cover max-h-[600px]"
-              />
-            ) : (
-              <>
-                <video 
-                  ref={videoRef}
-                  src={post.media_url} 
-                  controls 
-                  controlsList="nodownload"
-                  preload="metadata"
-                  muted
-                  loop
-                  playsInline
-                  className="w-full max-h-[600px] object-contain"
-                  style={{ backgroundColor: '#000' }}
-                  onPlay={trackVideoView}
-                >
-                  Votre navigateur ne supporte pas la lecture de vidéos.
-                </video>
-                {viewsCount > 0 && (
-                  <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                    <Eye className="h-4 w-4 text-white" />
-                    <span className="text-sm font-medium text-white">
-                      {viewsCount.toLocaleString()} {viewsCount === 1 ? 'vue' : 'vues'}
-                    </span>
-                  </div>
-                )}
-              </>
+            <OptimizedMediaWithCache
+              src={post.media_url}
+              alt="Post media"
+              type={post.media_type as 'image' | 'video'}
+              aspectRatio="auto"
+              quality={isMobile ? 'low' : 'medium'}
+              className={isMobile ? 'max-h-[300px]' : 'max-h-[600px]'}
+              showControls={post.media_type === 'video'}
+              autoPlay={post.media_type === 'video' && !isMobile} // Désactiver autoplay sur mobile (browsers bloquent souvent)
+              muted={true}
+              onClick={() => {
+                if (post.media_type === 'video') {
+                  trackVideoView();
+                }
+              }}
+            />
+            {post.media_type === 'video' && viewsCount > 0 && (
+              <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                <Eye className="h-4 w-4 text-white" />
+                <span className="text-sm font-medium text-white">
+                  {viewsCount.toLocaleString()} {viewsCount === 1 ? 'vue' : 'vues'}
+                </span>
+              </div>
             )}
           </div>
         )}

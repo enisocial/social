@@ -123,7 +123,13 @@ export const usePresenceRealtime = () => {
         schema: 'public',
         table: 'user_presence'
       }, async (payload: any) => {
-        console.log('🔄 [PRESENCE] Changement détecté:', payload);
+        console.log('🔄 [PRESENCE] Changement détecté:', {
+          event: payload.eventType,
+          userId: payload.new?.user_id || payload.old?.user_id,
+          oldOnline: payload.old?.is_online,
+          newOnline: payload.new?.is_online,
+          timestamp: new Date().toISOString()
+        });
 
         // Recharger toutes les présences et mettre à jour le state
         const { data, error } = await supabase
@@ -150,9 +156,19 @@ export const usePresenceRealtime = () => {
               lastSeen: updatedPresence?.last_seen
             });
           }
+
+          console.log('📊 [PRESENCE] Toutes les présences après update:', Array.from(presenceMap.entries()).map(([id, data]) => ({
+            userId: id,
+            isOnline: data.is_online,
+            lastSeen: data.last_seen
+          })));
+        } else {
+          console.error('❌ [PRESENCE] Erreur rechargement présences:', error);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 [PRESENCE] Channel status:', status);
+      });
 
     console.log('🎧 [PRESENCE] Subscription démarrée');
 

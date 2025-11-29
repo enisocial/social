@@ -41,6 +41,7 @@ interface PresenceState {
 }
 
 export const useMessenger = (conversationId: string) => {
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -52,7 +53,11 @@ export const useMessenger = (conversationId: string) => {
 
   // --- ULTRA FAST MESSAGES LOAD ---
   const fetchMessages = useCallback(async () => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      console.log('📨 [MESSAGES] No conversationId provided, skipping fetch');
+      return;
+    }
+    console.log('📨 [MESSAGES] Fetching messages for conversation:', conversationId);
     setLoading(true);
 
     // STRATÉGIE ULTRA-RAPIDE: Cache agressif d'abord
@@ -88,11 +93,21 @@ export const useMessenger = (conversationId: string) => {
 
         if (msgError) {
           console.error('❌ Messages query error:', msgError);
+          console.error('❌ Query details:', {
+            conversationId,
+            error: msgError.message,
+            code: msgError.code,
+            details: msgError.details,
+            hint: msgError.hint
+          });
           setMessages([]);
           return;
         }
 
+        console.log('📨 [MESSAGES] Raw messages fetched:', rawMessages?.length || 0, 'for conversation:', conversationId);
+
         if (!rawMessages || rawMessages.length === 0) {
+          console.log('📨 [MESSAGES] No messages found for conversation:', conversationId);
           const emptyMessages: Message[] = [];
           cacheService.set(cacheKey, emptyMessages, 30 * 1000); // Cache 30 secondes
           setMessages(emptyMessages);
@@ -162,16 +177,22 @@ export const useMessenger = (conversationId: string) => {
   // --- Setup Realtime subscription ---
   const setupRealtime = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !conversationId) return;
+    if (!user || !conversationId) {
+      console.log('❌ setupRealtime: Missing user or conversationId', { user: !!user, conversationId });
+      return;
+    }
+
+    console.log('🎯 Setting up realtime for conversation:', conversationId);
 
     // Presence: mark user online
     try {
-      await supabase.rpc('update_user_presence', {
+      const presenceResult = await supabase.rpc('update_user_presence', {
         p_user_id: user.id,
         p_online: true
       });
+      console.log('✅ User marked online:', presenceResult);
     } catch (error) {
-      console.error('Failed to mark user online:', error);
+      console.error('❌ Failed to mark user online:', error);
     }
 
     // Get other user ID
@@ -220,39 +241,33 @@ export const useMessenger = (conversationId: string) => {
     // New message
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
       const newMsg = payload.new as Message;
+      console.log('📨 [REALTIME] New message received:', newMsg.content?.substring(0, 30), 'from:', newMsg.sender_id);
+
       setMessages(prev => {
-        // Deduplication logic:
-        // 1. Check if we already have this exact ID (classic dup)
-        if (prev.some(m => m.id === newMsg.id)) return prev;
-        
-        // 2. Check if we have a temp message that matches this real one
-        // We can match by content + timestamp proximity + sender_id
-        // Or simpler: rely on the sendMessage updating the temp ID to real ID before this event fires
-        // But if race condition happens (Realtime arrives BEFORE sendMessage insert resolves),
-        // we might have both.
-        
-        // Strategy: We won't try fuzzy matching here to avoid false positives.
-        // Instead, we rely on the fact that sendMessage updates the ID in-place.
-        // If Realtime arrives first, we add it. 
-        // When sendMessage resolves, it updates the temp ID to the real ID.
-        // Then React reconciliation might show duplicates if we are not careful.
-        
-        // Robust fix:
-        // Use a 'client_side_id' column if possible, but schema changes are heavy.
-        // Alternative: Check if there is a temp message with same content/sender created < 2 sec ago
+        // 1. Check if we already have this exact ID (shouldn't happen but safety check)
+        if (prev.some(m => m.id === newMsg.id)) {
+          console.log('⚠️ [REALTIME] Message already exists, skipping');
+          return prev;
+        }
+
+        // 2. Check if we have a temp message that matches this real one (optimistic update replacement)
         const now = new Date(newMsg.created_at).getTime();
-        const duplicateTemp = prev.find(m => 
-          m.id.startsWith('temp-') && 
-          m.content === newMsg.content && 
+        const duplicateTemp = prev.find(m =>
+          m.id.startsWith('temp-') &&
+          m.content === newMsg.content &&
           m.sender_id === newMsg.sender_id &&
-          Math.abs(new Date(m.created_at).getTime() - now) < 5000
+          Math.abs(new Date(m.created_at).getTime() - now) < 10000 // 10 seconds window
         );
 
         if (duplicateTemp) {
+          console.log('🔄 [REALTIME] Replacing temp message with real message');
           // Replace the temp message with the real one
-          return prev.map(m => m.id === duplicateTemp.id ? newMsg : m);
+          return prev.map(m => m.id === duplicateTemp.id ? { ...newMsg, sender: m.sender } : m);
         }
 
+        // 3. Add the new message if it's not from the current user (current user messages are handled by optimistic updates)
+        // Actually, we should add all messages and let deduplication handle it
+        console.log('➕ [REALTIME] Adding new message to state');
         return [...prev, newMsg];
       });
     });
@@ -286,12 +301,20 @@ export const useMessenger = (conversationId: string) => {
     });
 
     await channel.subscribe(async (status) => {
+      console.log('📡 Realtime subscription status:', status, 'for conversation:', conversationId);
       if (status === 'SUBSCRIBED') {
+        console.log('✅ Realtime channel subscribed successfully');
         await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
+        console.log('✅ User presence tracked in channel');
+      } else if (status === 'CLOSED') {
+        console.log('❌ Realtime channel closed');
+      } else if (status === 'CHANNEL_ERROR') {
+        console.log('❌ Realtime channel error');
       }
     });
 
     channelRef.current = channel;
+    console.log('🎯 Realtime setup completed for conversation:', conversationId);
   }, [conversationId]);
 
   // ÉCOUTER LES CHANGEMENTS D'AUTHENTIFICATION POUR NETTOYER LES ABONNEMENTS
@@ -440,14 +463,15 @@ export const useMessenger = (conversationId: string) => {
   const sendMessage = useCallback(async (content: string, attachment?: { url: string; type: string; name: string }, replyToId?: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.error('Pas d\'utilisateur authentifié');
+      console.error('❌ Pas d\'utilisateur authentifié');
       return;
     }
     if (!conversationId) {
-      console.error('Pas d\'ID de conversation');
+      console.error('❌ Pas d\'ID de conversation');
       return;
     }
 
+    console.log('📤 [SEND] Starting to send message:', content.substring(0, 30));
     setSending(true);
 
     if (!checkRateLimit('message')) {
@@ -475,7 +499,12 @@ export const useMessenger = (conversationId: string) => {
       sender: { id: user.id, name: 'Vous', username: '', avatar_url: null }
     };
 
-    setMessages(prev => [...prev, optimistic]);
+    console.log('⚡ [SEND] Adding optimistic message to state:', tempId);
+    setMessages(prev => {
+      const newMessages = [...prev, optimistic];
+      console.log('📋 [SEND] Messages state after adding optimistic:', newMessages.length, 'messages');
+      return newMessages;
+    });
 
     try {
       const { data: newMsg, error } = await supabase.from('messages').insert({

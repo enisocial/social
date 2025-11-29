@@ -228,7 +228,8 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
     maxHeight: '100dvh',
     borderRadius: 0,
     display: isMinimized ? 'none' : 'flex',
-    flexDirection: 'column' as const
+    flexDirection: 'column' as const,
+    zIndex: 9999
   } : isMinimized ? {
     right: `${20 + position * 70}px`,
     bottom: '20px',
@@ -313,26 +314,30 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
       {!isMinimized && (
         <>
           <ScrollArea className="flex-1 overflow-y-auto overscroll-contain" ref={scrollRef}>
-            <div className={isMobile ? 'p-4 space-y-4 pb-2' : 'p-3 space-y-2 pb-2'}>
+            <div className={isMobile ? 'p-4 space-y-3 pb-2' : 'p-3 space-y-2 pb-2'}>
               {loading ? <div className="flex items-center justify-center h-40"><p className="text-sm text-muted-foreground">Chargement...</p></div>
               : messages.length === 0 ? <div className="flex items-center justify-center h-40"><p className="text-sm text-muted-foreground">Aucun message</p></div>
               : messages.map(message => {
                 const isOwn = message.sender_id === user?.id;
                 const replyToMessage = message.reply_to ? messages.find(m => m.id === message.reply_to) : null;
                 return (
-                  <div key={message.id} id={`msg-${message.id}`} className={`flex ${isOwn ? 'justify-end pr-2' : 'justify-start pl-2'} w-full`}>
-                    <div className={`group flex flex-col ${isOwn ? 'max-w-[220px] items-end' : 'max-w-[240px] items-start'}`}>
+                  <div key={message.id} id={`msg-${message.id}`} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} w-full ${isMobile ? 'px-2' : 'px-1'}`}>
+                    <div className={`group flex flex-col ${isOwn ? `max-w-[${isMobile ? '280' : '220'}px] items-end` : `max-w-[${isMobile ? '280' : '240'}px] items-start`}`}>
                       {replyToMessage && <div className={`text-xs mb-1 pl-2 border-l-2 ${isOwn ? 'border-primary' : 'border-accent'} opacity-70 max-w-full`}><p className="truncate">↩ {replyToMessage.content}</p></div>}
-                      <div className={`rounded-2xl px-2.5 py-1.5 inline-block max-w-full ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}`}>
-                        {message.attachment_url && <div className="mb-1">
+                      <div className={`relative rounded-2xl px-3 py-2 inline-block max-w-full shadow-sm ${
+                        isOwn
+                          ? 'bg-blue-600 text-white rounded-br-md'
+                          : 'bg-gray-100 text-gray-900 rounded-bl-md border border-gray-200'
+                      } ${isMobile ? 'text-base' : 'text-sm'}`}>
+                        {message.attachment_url && <div className="mb-2">
                           {message.attachment_type?.startsWith('image/') ? (
                             <OptimizedMediaWithCache
                               src={message.attachment_url}
                               alt={message.attachment_name || 'Image partagée'}
                               type="image"
                               aspectRatio="auto"
-                              quality="medium"
-                              className="rounded max-w-[140px] h-auto max-h-24 cursor-pointer"
+                              quality="low"
+                              className="rounded-lg max-w-[140px] max-h-24 cursor-pointer"
                               onClick={() => window.open(message.attachment_url, '_blank')}
                             />
                           ) : message.attachment_type?.startsWith('video/') ? (
@@ -344,7 +349,7 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
                               showControls={false}
                               muted={true}
                               autoPlay={false}
-                              className="rounded max-w-[140px] max-h-24"
+                              className="rounded-lg max-w-[140px] max-h-24"
                             />
                           ) : (
                             <a href={message.attachment_url} target="_blank" rel="noopener noreferrer" className="text-xs underline flex items-center gap-1">
@@ -353,11 +358,11 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
                             </a>
                           )}
                         </div>}
-                        <p className="text-sm break-words">{message.content}{message.edited && <span className="text-xs opacity-50 ml-1">(modifié)</span>}</p>
-                        <div className="flex items-center justify-between mt-1 gap-2">
-                          <div className="flex items-center gap-1">
-                            <p className={`text-xs ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{formatDistanceToNow(new Date(message.created_at), { addSuffix: true, locale: fr })}</p>
-                          </div>
+                        <p className="break-words leading-relaxed">{message.content}{message.edited && <span className="text-xs opacity-70 ml-1">(modifié)</span>}</p>
+                        <div className="flex items-center justify-end mt-1 gap-1">
+                          <p className={`text-xs ${isOwn ? 'text-blue-200' : 'text-gray-500'}`}>
+                            {formatDistanceToNow(new Date(message.created_at), { addSuffix: false, locale: fr })}
+                          </p>
                           <MessageActions messageId={message.id} isOwnMessage={isOwn} isPinned={!!message.pinned_at} onReply={() => setReplyingTo(message)} onEdit={() => { setEditingMessage(message); setMessageText(message.content); }} onDelete={() => deleteMessage(message.id)} onPin={() => pinMessage(message.id, !!message.pinned_at)} />
                         </div>
                       </div>
@@ -370,22 +375,50 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
           </ScrollArea>
 
           {/* Input */}
-          <div className={`border-t border-border bg-card flex-shrink-0 ${isMobile ? 'p-3 pb-safe' : 'p-2'}`}>
+          <div className={`border-t border-border bg-card flex-shrink-0 ${isMobile ? 'p-4 pb-safe-or-4' : 'p-2'}`}>
+            {/* Debug info for mobile */}
+            {isMobile && <div className="mb-2 text-xs text-muted-foreground">📱 Mode Mobile Activé</div>}
             {/* Preview for reply/edit/file */}
-            {(replyingTo || editingMessage || selectedFile) && <div className={`max-h-20 overflow-y-auto ${isMobile ? 'mb-3' : 'mb-2'}`}>
-              {replyingTo && <div className="mb-1 p-1.5 bg-accent rounded text-xs flex items-center gap-2"><div className="flex-1 min-w-0"><p className="font-medium truncate text-[10px]">↩ {replyingTo.sender?.name}</p><p className="truncate opacity-70">{replyingTo.content}</p></div><Button variant="ghost" size="icon" className="h-5 w-5 flex-shrink-0" onClick={() => setReplyingTo(null)}><X className="h-3 w-3" /></Button></div>}
-              {editingMessage && <div className="mb-1 p-1.5 bg-accent rounded text-xs flex items-center gap-2"><p className="flex-1 font-medium truncate text-[10px]">✏️ Modifier</p><Button variant="ghost" size="icon" className="h-5 w-5 flex-shrink-0" onClick={() => { setEditingMessage(null); setMessageText(''); }}><X className="h-3 w-3" /></Button></div>}
+            {(replyingTo || editingMessage || selectedFile) && <div className="max-h-20 overflow-y-auto mb-2">
+              {replyingTo && <div className="mb-1 p-1.5 bg-accent rounded text-xs flex items-center gap-2"><div className="flex-1 min-w-0"><p className="font-medium truncate text-[10px]">↩ {replyingTo.sender?.name}</p><p className="truncate opacity-70">{replyingTo.content}</p></div><Button variant="ghost" size="icon" className="h-4 w-4 flex-shrink-0" onClick={() => setReplyingTo(null)}><X className="h-3 w-3" /></Button></div>}
+              {editingMessage && <div className="mb-1 p-1.5 bg-accent rounded text-xs flex items-center gap-2"><p className="flex-1 font-medium truncate text-[10px]">✏️ Modifier</p><Button variant="ghost" size="icon" className="h-4 w-4 flex-shrink-0" onClick={() => { setEditingMessage(null); setMessageText(''); }}><X className="h-3 w-3" /></Button></div>}
               {selectedFile && <div className="mb-1 p-1 bg-accent rounded flex items-center gap-1.5">{selectedFile.type.startsWith('image/') && <img src={URL.createObjectURL(selectedFile)} alt="Preview" className="h-8 w-8 object-cover rounded flex-shrink-0" />}<span className="text-[10px] truncate flex-1 max-w-[150px]">{selectedFile.name}</span><Button variant="ghost" size="icon" className="h-4 w-4 flex-shrink-0" onClick={() => setSelectedFile(null)}><X className="h-2.5 w-2.5" /></Button></div>}
             </div>}
-            <div className={`flex ${isMobile ? 'gap-3' : 'gap-1.5'}`}>
+            <div className={`flex items-end ${isMobile ? 'gap-3' : 'gap-1.5'}`}>
               <input ref={fileInputRef} type="file" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) setSelectedFile(file); }} />
               <Button variant="ghost" size="icon" className={isMobile ? 'h-10 w-10 flex-shrink-0' : 'h-8 w-8 flex-shrink-0'} onClick={() => fileInputRef.current?.click()} disabled={uploading || sending}><Paperclip className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} /></Button>
-              <input type="text" value={messageText} onChange={e => handleTextChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Aa" className={`flex-1 bg-background border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-primary ${isMobile ? 'px-4 py-3 text-base' : 'px-3 py-1.5 text-sm'}`} disabled={uploading || sending} />
+              <div className="flex-1 relative">
+                <textarea
+                  value={messageText}
+                  onChange={e => handleTextChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Tapez un message..."
+                  className={`w-full bg-background border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary resize-none ${
+                    isMobile ? 'px-4 py-3 text-base min-h-[44px] max-h-[120px]' : 'px-3 py-1.5 text-sm min-h-[32px] max-h-[80px]'
+                  }`}
+                  disabled={uploading || sending}
+                  rows={1}
+                  style={{
+                    height: 'auto',
+                    minHeight: isMobile ? '44px' : '32px'
+                  }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, isMobile ? 120 : 80) + 'px';
+                  }}
+                />
+              </div>
               <Button
-                size="icon"
+                size={isMobile ? "default" : "icon"}
                 className={`rounded-full flex-shrink-0 transition-all duration-200 active:scale-95 ${
                   isMobile
-                    ? 'h-11 w-11 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl border-2 border-blue-400/30'
+                    ? 'h-12 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg shadow-lg'
                     : 'h-8 w-8'
                 } ${
                   (!messageText.trim() && !selectedFile) || uploading || sending
@@ -395,9 +428,14 @@ export const ChatBubble = ({ conversationId, otherUser, isMinimized, position }:
                 onClick={handleSendMessage}
                 disabled={(!messageText.trim() && !selectedFile) || uploading || sending}
               >
-                <Send className={`${isMobile ? 'h-5 w-5' : 'h-4 w-4'} transition-transform duration-200 ${
-                  sending ? 'animate-pulse' : ''
-                }`} />
+                {isMobile ? (
+                  <>
+                    <Send className="h-5 w-5 mr-2" />
+                    ENVOYER
+                  </>
+                ) : (
+                  <Send className="h-4 w-4 transition-transform duration-200" />
+                )}
               </Button>
             </div>
           </div>

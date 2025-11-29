@@ -66,12 +66,36 @@ const useIntersectionObserver = (ref: React.RefObject<Element>, options?: Inters
   return { isIntersecting, isNearViewport };
 };
 
-// Hook pour optimiser les URLs d'images
+// Hook pour détecter si on est sur mobile
+const useIsMobileDevice = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768 || 'ontouchstart' in window;
+      setIsMobile(mobile);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+};
+
+// Hook pour optimiser les URLs d'images avec réduction mobile automatique
 const useOptimizedImageUrl = (src: string, quality: 'low' | 'medium' | 'high' = 'medium') => {
   const [optimizedSrc, setOptimizedSrc] = useState<string>('');
+  const isMobile = useIsMobileDevice();
 
   useEffect(() => {
     if (!src) return;
+
+    // Réduction automatique de qualité sur mobile pour économiser la bande passante
+    const effectiveQuality = isMobile ? (
+      quality === 'high' ? 'medium' : quality === 'medium' ? 'low' : 'low'
+    ) : quality;
 
     // Si c'est déjà une URL optimisée (Supabase, Cloudinary, etc.), utiliser directement
     if (src.includes('supabase') || src.includes('cloudinary') || src.includes('imgix')) {
@@ -84,7 +108,7 @@ const useOptimizedImageUrl = (src: string, quality: 'low' | 'medium' | 'high' = 
       // Pour Supabase Storage, ajouter les paramètres de transformation
       if (src.includes('supabase')) {
         const separator = src.includes('?') ? '&' : '?';
-        setOptimizedSrc(`${src}${separator}${qualityParams[quality]}`);
+        setOptimizedSrc(`${src}${separator}${qualityParams[effectiveQuality]}`);
       } else {
         setOptimizedSrc(src);
       }
@@ -92,7 +116,7 @@ const useOptimizedImageUrl = (src: string, quality: 'low' | 'medium' | 'high' = 
       // Pour les autres URLs, utiliser directement
       setOptimizedSrc(src);
     }
-  }, [src, quality]);
+  }, [src, quality, isMobile]);
 
   return optimizedSrc;
 };
@@ -225,21 +249,27 @@ const OptimizedVideo = memo(({
     const video = videoRef.current;
     if (!video) return;
 
+    // Gestion spéciale pour mobile - forcer le chargement même sans intersection
+    const isMobileDevice = window.innerWidth < 768 || 'ontouchstart' in window;
+
     if (priority) {
       // Pour les vidéos prioritaires, précharger immédiatement
       video.preload = 'metadata';
       video.load();
     } else if (isVisible) {
       // Pour les vidéos visibles, charger complètement
-      video.preload = 'auto'; // Charger automatiquement
+      video.preload = 'auto';
       video.load();
     } else if (isNearViewport) {
       // Pour les vidéos proches de la viewport, précharger les métadonnées
       video.preload = 'metadata';
-      // Commencer un chargement léger des métadonnées
+      video.load();
+    } else if (isMobileDevice && !priority) {
+      // SUR MOBILE: Précharger même les vidéos lointaines pour éviter les blocages
+      video.preload = 'metadata';
       video.load();
     } else {
-      // Pour les vidéos lointaines, preload minimal
+      // Pour les vidéos lointaines sur desktop, preload minimal
       video.preload = 'none';
     }
   }, [priority, isVisible, isNearViewport]);
@@ -363,7 +393,7 @@ const OptimizedVideo = memo(({
           onError={handleError}
           onPlay={handlePlay}
           onPause={handlePause}
-          poster={`${src}#t=0.1`} // Thumbnail automatique à la première frame
+          poster={src.includes('supabase') ? `${src}?t=0.1` : undefined} // Poster pour Supabase
           style={{
             // S'assurer que le poster est visible avant le chargement
             backgroundColor: '#000',

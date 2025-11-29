@@ -149,3 +149,74 @@ BEGIN
   RETURN conv_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 13. TRIGGER POUR LES NOTIFICATIONS PUSH AUTOMATIQUES
+-- FONCTION QUI ENVOIE UNE NOTIFICATION PUSH LORSQU'UN MESSAGE EST REÇU
+CREATE OR REPLACE FUNCTION send_message_push_notification()
+RETURNS TRIGGER AS $$
+DECLARE
+  recipient_id UUID;
+  sender_profile RECORD;
+  recipient_online BOOLEAN;
+BEGIN
+  -- Récupérer l'ID du destinataire (celui qui n'est pas l'expéditeur)
+  SELECT user_id INTO recipient_id
+  FROM conversation_participants
+  WHERE conversation_id = NEW.conversation_id
+  AND user_id != NEW.sender_id
+  LIMIT 1;
+
+  -- Si pas de destinataire trouvé, ignorer
+  IF recipient_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Vérifier si le destinataire est en ligne
+  SELECT is_online INTO recipient_online
+  FROM user_presence
+  WHERE user_id = recipient_id;
+
+  -- Si le destinataire est en ligne, pas besoin de push notification
+  IF recipient_online THEN
+    RETURN NEW;
+  END IF;
+
+  -- Récupérer les infos de l'expéditeur
+  SELECT name INTO sender_profile
+  FROM profiles
+  WHERE id = NEW.sender_id;
+
+  -- Envoyer la notification push via Edge Function
+  PERFORM
+    net.http_post(
+      url := (supabase_url() || '/functions/v1/send-push-notification'),
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (SELECT value FROM vault.secrets WHERE name = 'service_role_key')
+      ),
+      body := jsonb_build_object(
+        'user_ids', jsonb_build_array(recipient_id),
+        'title', COALESCE(sender_profile.name, 'Nouveau message'),
+        'body', CASE
+          WHEN LENGTH(NEW.content) > 50 THEN LEFT(NEW.content, 50) || '...'
+          ELSE COALESCE(NEW.content, 'Nouveau message')
+        END,
+        'data', jsonb_build_object(
+          'type', 'message',
+          'conversationId', NEW.conversation_id,
+          'senderId', NEW.sender_id,
+          'messageId', NEW.id
+        )
+      )
+    );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- CRÉER LE TRIGGER QUI S'ACTIVE À CHAQUE INSERTION DE MESSAGE
+DROP TRIGGER IF EXISTS trigger_message_push_notification ON messages;
+CREATE TRIGGER trigger_message_push_notification
+  AFTER INSERT ON messages
+  FOR EACH ROW
+  EXECUTE FUNCTION send_message_push_notification();

@@ -60,19 +60,29 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
   isOpen,
   onClose
 }) => {
+
   const { user } = useAuth();
   const [newMessage, setNewMessage] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // UTILISER LE HOOK useMessenger POUR LA GESTION DES MESSAGES
   const {
     messages,
     loading,
     sending,
-    sendMessage: sendMessageHook
+    sendMessage: sendMessageHook,
+    setTyping
   } = useMessenger(conversationId);
+
+  // DEBUG: Afficher l'état des messages
+  console.log('📨 [CHAT] FacebookMessenger render - conversationId:', conversationId);
+  console.log('📨 [CHAT] Messages array length:', messages?.length || 0);
+  console.log('📨 [CHAT] Loading state:', loading);
+  console.log('📨 [CHAT] First few messages:', messages?.slice(0, 3));
 
   // CHARGER LES FONCTIONNALITÉS DEPUIS LA DB
   const { emojis, loading: emojisLoading } = useChatEmojis();
@@ -87,6 +97,13 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
 
   // LOG DÉTAILLÉ POUR DÉBOGUER LA PRÉSENCE - AFFICHAGE SIMPLE
   console.log('👤 STATUT POUR', otherUser.name, ':', otherUserOnline ? 'EN LIGNE' : 'HORS LIGNE');
+  console.log('📊 Données présence actuelles:', {
+    userId: otherUser.id,
+    presence: presenceData.get(otherUser.id),
+    isOnline: otherUserOnline,
+    lastSeen: otherUserLastSeen,
+    totalPresences: presenceData.size
+  });
 
   // VÉRIFICATION SPÉCIFIQUE POUR CHEADRACK
   if (otherUser.name === 'chedrack ENIANLOKO') {
@@ -95,18 +112,84 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
     console.log('🚨 CHEADRACK TOUTES LES PRÉSENCES:', Array.from(presenceData.entries()));
   }
 
-  // SCROLL AUTOMATIQUE VERS LE BAS UNIQUEMENT QUAND NOUVEAU MESSAGE
+  // FORCER LE RE-RENDER QUAND LES DONNÉES DE PRÉSENCE CHANGENT
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 1000); // Vérifier toutes les secondes
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // SCROLL AUTOMATIQUE VERS LE BAS - WHATSAPP STYLE (TOUJOURS AFFICHER LE DERNIER MESSAGE)
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end',
+        inline: 'nearest'
+      });
+    }
   }, []);
 
   useEffect(() => {
-    // SCROLL UNIQUEMENT POUR LES NOUVEAUX MESSAGES (PAS POUR LE CHARGEMENT INITIAL)
+    // SCROLL IMMÉDIATEMENT QUAND NOUVEAUX MESSAGES ARRIVENT
     if (messages.length > 0) {
-      const timer = setTimeout(scrollToBottom, 100);
+      // Scroll immédiat pour les nouveaux messages
+      const timer = setTimeout(scrollToBottom, 50);
       return () => clearTimeout(timer);
     }
   }, [messages.length, scrollToBottom]);
+
+  // SCROLL VERS LE BAS À CHAQUE CHANGEMENT DE MESSAGES (POUR MOBILE)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && messages.length > 0) {
+      const timer = setTimeout(scrollToBottom, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, scrollToBottom]);
+
+  // GESTION CLAVIER MOBILE - WHATSAPP STYLE
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth >= 768) return;
+
+    const handleViewportChange = () => {
+      if (!window.visualViewport) return;
+
+      const viewport = window.visualViewport;
+      const heightDiff = window.innerHeight - viewport.height;
+
+      // Si différence > 150px, c'est probablement le clavier
+      if (heightDiff > 150) {
+        setKeyboardHeight(heightDiff);
+        // Scroll vers le bas pour voir les derniers messages
+        setTimeout(scrollToBottom, 300);
+      } else {
+        setKeyboardHeight(0);
+      }
+    };
+
+    const handleResize = () => {
+      // Petit délai pour laisser le viewport se stabiliser
+      setTimeout(handleViewportChange, 100);
+    };
+
+    // Focus sur l'input pour déclencher le clavier
+    const handleFocus = () => {
+      setTimeout(() => {
+        inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    };
+
+    window.visualViewport?.addEventListener('resize', handleResize);
+    inputRef.current?.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      inputRef.current?.removeEventListener('focus', handleFocus);
+    };
+  }, [scrollToBottom]);
 
   // ENVOI DE MESSAGE VIA LE HOOK useMessenger
   const sendMessage = useCallback(async (content: string) => {
@@ -133,10 +216,22 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
     }
   };
 
-  // GESTION TYPING INDICATOR
+  // GESTION TYPING INDICATOR - RÉACTIVÉ AVEC TIMEOUT
   const handleInputChange = (value: string) => {
     setNewMessage(value);
-    // TODO: Implémenter typing indicator avec WebSocket
+    // ACTIVER L'INDICATEUR DE SAISIE
+    if (value.trim().length > 0) {
+      console.log('⌨️ Typing indicator: ON for', otherUser.name);
+      setTyping(true);
+      // ARRÊTER AUTOMATIQUEMENT APRÈS 3 SECONDES SANS SAISIE
+      setTimeout(() => {
+        console.log('⌨️ Typing indicator: OFF (timeout) for', otherUser.name);
+        setTyping(false);
+      }, 3000);
+    } else {
+      console.log('⌨️ Typing indicator: OFF (empty) for', otherUser.name);
+      setTyping(false);
+    }
   };
 
   // UPLOAD IMAGE RÉEL AVEC STOCKAGE SUPABASE
@@ -208,10 +303,24 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ duration: 0.2 }}
-        className="fixed bottom-4 right-4 w-80 h-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 flex flex-col"
+        className={`${
+          // Full screen on mobile, floating on desktop
+          typeof window !== 'undefined' && window.innerWidth < 768
+            ? 'fixed inset-0 w-full h-screen rounded-none border-0 bg-white'
+            : 'fixed bottom-4 right-4 w-80 h-96 rounded-lg border border-gray-200 bg-white'
+        } shadow-2xl z-50 ${
+          typeof window !== 'undefined' && window.innerWidth < 768
+            ? 'flex flex-col pb-safe'
+            : 'flex flex-col'
+        }`}
       >
         {/* HEADER */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-blue-50 rounded-t-lg">
+        <div className={`flex items-center justify-between border-b border-gray-200 bg-blue-50 ${
+          // Larger padding on mobile full screen
+          typeof window !== 'undefined' && window.innerWidth < 768
+            ? 'p-4 min-h-[64px] rounded-none'
+            : 'p-3 rounded-t-lg'
+        }`}>
           <div className="flex items-center gap-3">
             <div className="relative">
               <Avatar className="w-8 h-8">
@@ -256,7 +365,11 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
         </div>
 
         {/* MESSAGES AREA - RENDU IMMÉDIAT */}
-        <ScrollArea className="flex-1 p-3 bg-gray-50">
+        <ScrollArea className={`flex-1 p-3 bg-gray-50 ${
+          typeof window !== 'undefined' && window.innerWidth < 768
+            ? 'pb-48' // Even more space for fixed input area on mobile
+            : ''
+        }`}>
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-3">
@@ -336,142 +449,284 @@ export const FacebookMessenger: React.FC<FacebookMessengerProps> = ({
           )}
         </ScrollArea>
 
-        {/* INPUT AREA */}
-        <div className="p-3 border-t border-gray-200 bg-white rounded-b-lg">
-          {/* EMOJI PICKER - AVEC VRAIS EMOJIS DEPUIS DB */}
-          {showEmoji && (
-            <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
-              <div className="grid grid-cols-8 gap-1">
-                {emojis.map((emoji) => (
-                  <button
-                    key={emoji.id}
-                    onClick={() => {
-                      setNewMessage(prev => prev + emoji.emoji);
-                      setShowEmoji(false);
-                    }}
-                    className="w-8 h-8 hover:bg-gray-200 rounded flex items-center justify-center text-lg transition-colors"
-                    title={emoji.name}
-                  >
-                    {emoji.emoji}
-                  </button>
-                ))}
+        {/* INPUT AREA - FIXED POSITION FOR MOBILE */}
+        {typeof window !== 'undefined' && window.innerWidth < 768 ? (
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-safe-or-4 z-60">
+
+            {/* EMOJI PICKER - AVEC VRAIS EMOJIS DEPUIS DB */}
+            {showEmoji && (
+              <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
+                <div className="grid grid-cols-8 gap-1">
+                  {emojis.map((emoji) => (
+                    <button
+                      key={emoji.id}
+                      onClick={() => {
+                        setNewMessage(prev => prev + emoji.emoji);
+                        setShowEmoji(false);
+                      }}
+                      className="w-8 h-8 hover:bg-gray-200 rounded flex items-center justify-center text-lg transition-colors"
+                      title={emoji.name}
+                    >
+                      {emoji.emoji}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* STICKER PICKER - AVEC VRAIS STICKERS DEPUIS DB */}
-          {showStickers && (
-            <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
-              <div className="grid grid-cols-4 gap-2">
-                {stickers.map((sticker) => (
-                  <button
-                    key={sticker.id}
-                    onClick={() => handleStickerSend(sticker)}
-                    className="w-12 h-12 hover:bg-gray-200 rounded flex items-center justify-center transition-colors"
-                    title={sticker.name}
-                  >
-                    <img
-                      src={sticker.image_url}
-                      alt={sticker.name}
-                      className="w-8 h-8 object-contain"
-                    />
-                  </button>
-                ))}
+            {/* STICKER PICKER - AVEC VRAIS STICKERS DEPUIS DB */}
+            {showStickers && (
+              <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
+                <div className="grid grid-cols-4 gap-2">
+                  {stickers.map((sticker) => (
+                    <button
+                      key={sticker.id}
+                      onClick={() => handleStickerSend(sticker)}
+                      className="w-12 h-12 hover:bg-gray-200 rounded flex items-center justify-center transition-colors"
+                      title={sticker.name}
+                    >
+                      <img
+                        src={sticker.image_url}
+                        alt={sticker.name}
+                        className="w-8 h-8 object-contain"
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* INPUT PRINCIPAL */}
+            <div className="flex items-center gap-2">
+              {/* UPLOAD IMAGE - RÉEL */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                  }}
+                />
+                <Image className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
+              </label>
+
+              {/* UPLOAD FICHIER - RÉEL */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                />
+                <Paperclip className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
+              </label>
+
+              {/* STICKERS - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowStickers(!showStickers);
+                  setShowEmoji(false);
+                }}
+                className="w-8 h-8 p-0"
+              >
+                <Sticker className="w-4 h-4 text-gray-500 hover:text-blue-600" />
+              </Button>
+
+              {/* EMOJI - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowEmoji(!showEmoji);
+                  setShowStickers(false);
+                }}
+                className="w-8 h-8 p-0"
+              >
+                <Smile className="w-4 h-4 text-gray-500 hover:text-blue-600" />
+              </Button>
+
+              {/* INPUT TEXTE */}
+              <input
+                ref={inputRef}
+                type="text"
+                value={newMessage}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Tapez un message..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                disabled={sending}
+              />
+
+              {/* MIC/VOICE - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleVoiceRecording}
+                className={`w-8 h-8 p-0 ${recording ? 'text-red-500 animate-pulse' : 'text-gray-500 hover:text-blue-600'}`}
+              >
+                <Mic className="w-4 h-4" />
+              </Button>
+
+              {/* ENVOYER - RÉEL */}
+              <Button
+                onClick={() => newMessage.trim() && sendMessage(newMessage)}
+                disabled={!newMessage.trim() || sending}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 disabled:opacity-50"
+              >
+                {sending ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </Button>
             </div>
-          )}
-
-          {/* INPUT PRINCIPAL */}
-          <div className="flex items-center gap-2">
-            {/* UPLOAD IMAGE - RÉEL */}
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImageUpload(file);
-                }}
-              />
-              <Image className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
-            </label>
-
-            {/* UPLOAD FICHIER - RÉEL */}
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                }}
-              />
-              <Paperclip className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
-            </label>
-
-            {/* STICKERS - RÉEL */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setShowStickers(!showStickers);
-                setShowEmoji(false);
-              }}
-              className="w-8 h-8 p-0"
-            >
-              <Sticker className="w-4 h-4 text-gray-500 hover:text-blue-600" />
-            </Button>
-
-            {/* EMOJI - RÉEL */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setShowEmoji(!showEmoji);
-                setShowStickers(false);
-              }}
-              className="w-8 h-8 p-0"
-            >
-              <Smile className="w-4 h-4 text-gray-500 hover:text-blue-600" />
-            </Button>
-
-            {/* INPUT TEXTE */}
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => handleInputChange(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Tapez un message..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              disabled={sending}
-            />
-
-            {/* MIC/VOICE - RÉEL */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleVoiceRecording}
-              className={`w-8 h-8 p-0 ${recording ? 'text-red-500 animate-pulse' : 'text-gray-500 hover:text-blue-600'}`}
-            >
-              <Mic className="w-4 h-4" />
-            </Button>
-
-            {/* ENVOYER - RÉEL */}
-            <Button
-              onClick={() => newMessage.trim() && sendMessage(newMessage)}
-              disabled={!newMessage.trim() || sending}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 disabled:opacity-50"
-            >
-              {sending ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </Button>
           </div>
-        </div>
+        ) : (
+          /* DESKTOP INPUT AREA */
+          <div className="p-3 rounded-b-lg border-t border-gray-200 bg-white">
+            {/* EMOJI PICKER - AVEC VRAIS EMOJIS DEPUIS DB */}
+            {showEmoji && (
+              <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
+                <div className="grid grid-cols-8 gap-1">
+                  {emojis.map((emoji) => (
+                    <button
+                      key={emoji.id}
+                      onClick={() => {
+                        setNewMessage(prev => prev + emoji.emoji);
+                        setShowEmoji(false);
+                      }}
+                      className="w-8 h-8 hover:bg-gray-200 rounded flex items-center justify-center text-lg transition-colors"
+                      title={emoji.name}
+                    >
+                      {emoji.emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* STICKER PICKER - AVEC VRAIS STICKERS DEPUIS DB */}
+            {showStickers && (
+              <div className="mb-2 p-2 bg-gray-50 rounded-lg border max-h-32 overflow-y-auto">
+                <div className="grid grid-cols-4 gap-2">
+                  {stickers.map((sticker) => (
+                    <button
+                      key={sticker.id}
+                      onClick={() => handleStickerSend(sticker)}
+                      className="w-12 h-12 hover:bg-gray-200 rounded flex items-center justify-center transition-colors"
+                      title={sticker.name}
+                    >
+                      <img
+                        src={sticker.image_url}
+                        alt={sticker.name}
+                        className="w-8 h-8 object-contain"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* INPUT PRINCIPAL */}
+            <div className="flex items-center gap-2">
+              {/* UPLOAD IMAGE - RÉEL */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                  }}
+                />
+                <Image className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
+              </label>
+
+              {/* UPLOAD FICHIER - RÉEL */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                />
+                <Paperclip className={`w-5 h-5 text-gray-500 hover:text-blue-600 ${uploading ? 'animate-pulse' : ''}`} />
+              </label>
+
+              {/* STICKERS - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowStickers(!showStickers);
+                  setShowEmoji(false);
+                }}
+                className="w-8 h-8 p-0"
+              >
+                <Sticker className="w-4 h-4 text-gray-500 hover:text-blue-600" />
+              </Button>
+
+              {/* EMOJI - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowEmoji(!showEmoji);
+                  setShowStickers(false);
+                }}
+                className="w-8 h-8 p-0"
+              >
+                <Smile className="w-4 h-4 text-gray-500 hover:text-blue-600" />
+              </Button>
+
+              {/* INPUT TEXTE */}
+              <input
+                ref={inputRef}
+                type="text"
+                value={newMessage}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Tapez un message..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                disabled={sending}
+              />
+
+              {/* MIC/VOICE - RÉEL */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleVoiceRecording}
+                className={`w-8 h-8 p-0 ${recording ? 'text-red-500 animate-pulse' : 'text-gray-500 hover:text-blue-600'}`}
+              >
+                <Mic className="w-4 h-4" />
+              </Button>
+
+              {/* ENVOYER - RÉEL */}
+              <Button
+                onClick={() => newMessage.trim() && sendMessage(newMessage)}
+                disabled={!newMessage.trim() || sending}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 disabled:opacity-50"
+              >
+                {sending ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </motion.div>
     </AnimatePresence>
   );

@@ -1,8 +1,12 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { FacebookMessenger } from '@/components/messenger/FacebookMessenger';
+import { ChatBubble } from '@/components/messenger/ChatBubble';
 import { useMessengerBadges } from '@/hooks/useMessengerBadges';
 import { useConversations } from '@/hooks/useConversations';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 interface ConversationData {
   id: string;
@@ -45,33 +49,115 @@ export const useMessenger = () => {
 
 export const MessengerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [conversations, setConversations] = useState<Map<string, ConversationData>>(new Map());
-  const { markConversationAsRead } = useMessengerBadges();
+  const { markConversationAsRead, forceRefresh } = useMessengerBadges();
   const { createConversation } = useConversations();
+  const isMobile = useIsMobile();
+  const { user } = useAuth();
 
-  // ÉCOUTER LES NOUVEAUX MESSAGES POUR TOUTES LES CONVERSATIONS
-  // TEMPORAIREMENT DÉSACTIVÉ POUR ÉVITER LES ERREURS RLS
+  // ÉCOUTER LES NOUVEAUX MESSAGES POUR TOUTES LES CONVERSATIONS - SIMPLIFIÉ
   React.useEffect(() => {
-    console.log('🎧 [MESSENGER] Écoute globale désactivée (RLS actives)');
+    if (!user) {
+      console.log('❌ [GLOBAL] Pas d\'utilisateur connecté pour l\'écoute globale');
+      return;
+    }
 
-    // CODE COMMENTÉ TEMPORAIREMENT
-    /*
+    console.log('🎧 [GLOBAL] Configuration écoute globale des messages pour user:', user.id);
+    console.log('🎧 [GLOBAL] User object:', user);
+
     const globalChannel = supabase
-      .channel('global_messages')
+      .channel(`global_messages_${user.id}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages'
       }, async (payload) => {
-        // ... code existant
+        const newMessage = payload.new as any;
+        console.log('📨 [GLOBAL] Nouveau message détecté:', {
+          id: newMessage.id,
+          conversationId: newMessage.conversation_id,
+          senderId: newMessage.sender_id,
+          content: newMessage.content?.substring(0, 50),
+          timestamp: newMessage.created_at
+        });
+
+        // VÉRIFIER SI L'UTILISATEUR ACTUEL EST LE DESTINATAIRE
+        const isCurrentUserSender = newMessage.sender_id === user.id;
+
+        if (isCurrentUserSender) {
+          console.log('📤 [GLOBAL] Message envoyé par l\'utilisateur actuel - ignoré');
+          return;
+        }
+
+        // VÉRIFIER SI CETTE CONVERSATION EST DÉJÀ OUVERTE
+        const existingConversation = conversations.get(newMessage.conversation_id);
+
+        if (existingConversation) {
+          console.log('💬 [GLOBAL] Conversation déjà ouverte - message géré par listener spécifique');
+          // Le message sera géré par le listener spécifique de la conversation
+        } else {
+          console.log('🔔 [GLOBAL] Notification de nouveau message - conversation pas ouverte');
+
+          // RAFRAÎCHIR LES BADGES POUR METTRE À JOUR LE COMPTEUR
+          forceRefresh();
+
+          // AFFICHAGE D'UNE NOTIFICATION DANS L'APP (SIMPLE ALERT POUR L'INSTANT)
+          // Plus tard on pourra ajouter un système de notifications dans l'UI
+          console.log('🔔 [NOTIFICATION] Vous avez reçu un nouveau message !');
+          toast.info('Nouveau message reçu !');
+
+          // OPTIONNEL : Ouvrir automatiquement la conversation (désactivé pour l'instant)
+          /*
+          try {
+            const { data: sender, error: senderError } = await supabase
+              .from('profiles')
+              .select('id, name, username, avatar_url')
+              .eq('id', newMessage.sender_id)
+              .single();
+
+            if (sender && !senderError) {
+              const newConversation = {
+                id: newMessage.conversation_id,
+                otherUser: {
+                  id: sender.id,
+                  name: sender.name,
+                  username: sender.username,
+                  avatar_url: sender.avatar_url
+                },
+                isOpen: false, // Ne pas ouvrir automatiquement, juste notifier
+                resolving: false
+              };
+
+              setConversations(prev => {
+                const updated = new Map(prev);
+                updated.set(newMessage.conversation_id, newConversation);
+                return updated;
+              });
+
+              console.log('✅ [GLOBAL] Conversation ajoutée (fermée) avec notification');
+            }
+          } catch (error) {
+            console.error('❌ [GLOBAL] Erreur ajout conversation fermée:', error);
+          }
+          */
+        }
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('📡 [GLOBAL] Statut abonnement global:', status, err ? `Erreur: ${err}` : 'OK');
+
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ [GLOBAL] Abonnement global réussi - prêt à recevoir des notifications');
+        } else if (status === 'CLOSED') {
+          console.log('❌ [GLOBAL] Abonnement global fermé');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.log('❌ [GLOBAL] Erreur abonnement global:', err);
+        }
+      });
 
     return () => {
-      globalChannel.unsubscribe();
+      console.log('🧹 [GLOBAL] Nettoyage abonnement global');
+      supabase.removeChannel(globalChannel);
     };
-    */
-
-  }, []);
+  }, [user?.id, forceRefresh]);
 
   // CRÉER OU TROUVER UNE CONVERSATION - UTILISE LA VRAIE LOGIQUE DB
   const findOrCreateConversation = useCallback(async (otherUserId: string, otherUserData: any) => {
@@ -96,18 +182,18 @@ export const MessengerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // OUVRIR UNE CONVERSATION - VERSION INSTANTANÉE AVEC GESTION D'ÉTAT
   const openBubble = useCallback(async (conversationId: string | null, otherUser: any) => {
-    console.log('🗨️ [OPEN] Ouverture avec ID:', conversationId, 'User:', otherUser?.name);
+    console.log('🚀 [OPEN] Opening chat bubble:', { conversationId, otherUser });
 
     // SI ON A DÉJÀ UN CONVERSATIONID VALIDE, OUVRIR DIRECTEMENT
     if (conversationId && !conversationId.startsWith('temp_')) {
-      console.log('✅ [OPEN] ID valide, ouverture directe');
+      console.log('✅ [OPEN] ID valide, ouverture directe:', conversationId);
       setConversations(prev => {
         const existing = prev.get(conversationId);
         if (existing) {
-          console.log('🔄 [OPEN] Chat déjà ouvert');
+          console.log('🔄 [OPEN] Chat déjà ouvert:', conversationId);
           return new Map(prev).set(conversationId, { ...existing, isOpen: true });
         } else {
-          console.log('🆕 [OPEN] Nouvelle conversation');
+          console.log('🆕 [OPEN] Nouvelle conversation:', conversationId);
           return new Map(prev).set(conversationId, {
             id: conversationId,
             otherUser: {
@@ -257,7 +343,7 @@ export const MessengerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <MessengerContext.Provider value={value}>
       {children}
 
-      {/* RENDRE LES CONVERSATIONS OUVERTES */}
+      {/* RENDRE LES CONVERSATIONS OUVERTES - MEME DESIGN POUR MOBILE ET WEB */}
       {Array.from(conversations.entries()).map(([convId, convData]) => (
         <FacebookMessenger
           key={convId}
