@@ -21,38 +21,42 @@ export default function FriendSuggestions() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <Navbar />
-      
-      <div className="container max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link to="/friends">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-3">
-                <Users className="w-8 h-8 text-primary" />
-                Suggestions d'amis
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Personnes que vous pourriez connaître
-              </p>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* HEADER MODERNE */}
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 dark:border-gray-700/50 p-8 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" asChild className="bg-white/60 hover:bg-white/80">
+                <Link to="/friends">
+                  <ArrowLeft className="w-5 h-5" />
+                </Link>
+              </Button>
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent mb-3 flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
+                  </div>
+                  Suggestions d'amis
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400 text-lg">
+                  Personnes que vous pourriez connaître
+                </p>
+              </div>
             </div>
+
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="gap-2 bg-white/60 hover:bg-white/80"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Button>
           </div>
-          
-          <Button 
-            variant="outline" 
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Actualiser
-          </Button>
         </div>
 
         {/* Loading state */}
@@ -99,7 +103,7 @@ export default function FriendSuggestions() {
             </Button>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

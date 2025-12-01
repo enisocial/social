@@ -125,12 +125,12 @@ export const GlobalSearch = () => {
           placeholder="Rechercher des utilisateurs, posts, groupes..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          className="pl-10 bg-background border-border"
+          className="pl-10 bg-white/80 backdrop-blur-sm border-white/20 dark:border-gray-700/50"
         />
       </div>
 
       {query.length >= 2 && (
-        <Card className="absolute z-50 w-full mt-2 max-h-96 overflow-y-auto bg-card border-border">
+        <div className="absolute z-50 w-full mt-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 dark:border-gray-700/50 max-h-96 overflow-y-auto">
           {loading ? (
             <div className="p-4 text-center text-muted-foreground">
               Recherche en cours...
@@ -198,7 +198,7 @@ export const GlobalSearch = () => {
               </TabsContent>
             </Tabs>
           )}
-        </Card>
+        </div>
       )}
     </div>
   );

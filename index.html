@@ -2,41 +2,69 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <!-- Favicon and PWA icons -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="shortcut icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="msapplication-TileColor" content="#F59E0B" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Connectez-vous avec vos amis et partagez vos moments - Réseau social moderne et sécurisé" />
-    <meta name="theme-color" content="#8B5CF6" />
+    <meta name="description" content="🌍 Social - Le réseau social panafricain qui connecte le continent. Partagez vos histoires, découvrez des cultures, construisez des liens authentiques avec la communauté africaine." />
+    <meta name="keywords" content="réseau social, Afrique, communauté, partage, culture, amis, connexion, panafricain" />
+    <meta name="author" content="Social - Réseau Social Panafricain" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="theme-color" content="#F59E0B" />
+    <meta name="msapplication-TileColor" content="#F59E0B" />
 
     <!-- Sécurité CSP -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.vercel-insights.com;
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.vercel-insights.com https://cdn.by.wonderpush.com;
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src 'self' https://fonts.gstatic.com;
       img-src 'self' data: blob: https://*.supabase.co https://cdn.mcmovement.org.za;
-      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://cdn.mcmovement.org.za;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://cdn.mcmovement.org.za https://*.wonderpush.com;
       media-src 'self' blob: https://*.supabase.co;
       object-src 'none';
       base-uri 'self';
       form-action 'self';
-      frame-ancestors 'none';
     ">
 
-    <!-- Open Graph / Facebook -->
+    <!-- Open Graph / Facebook - ULTRA PROFESSIONNEL -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Social - Réseau Social Panafricain" />
+    <meta property="og:title" content="🌍 Social - Le réseau social qui unit l'Afrique" />
+    <meta property="og:description" content="Rejoignez la révolution numérique africaine. Connectez-vous avec votre communauté, partagez vos expériences culturelles, et construisez des liens authentiques à travers le continent. #AfricaUnited" />
     <meta property="og:url" content="https://social-app.com" />
-    <meta property="og:title" content="Social - Réseau Social" />
-    <meta property="og:description" content="Connectez-vous avec vos amis et partagez vos moments" />
     <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="Social - Réseau Social Panafricain - Connexion authentique entre Africains" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:locale:alternate" content="en_US" />
 
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://social-app.com" />
-    <meta property="twitter:title" content="Social - Réseau Social" />
-    <meta property="twitter:description" content="Connectez-vous avec vos amis et partagez vos moments" />
-    <meta property="twitter:image" content="/og-image.png" />
+    <!-- Twitter Cards - ULTRA PROFESSIONNEL -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@SocialAfrica" />
+    <meta name="twitter:creator" content="@SocialAfrica" />
+    <meta name="twitter:title" content="🌍 Social - Le réseau social panafricain" />
+    <meta name="twitter:description" content="La plateforme qui connecte le continent africain. Partagez vos histoires, découvrez des cultures, construisez des communautés authentiques. #AfricaUnited #DigitalAfrica" />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="Social - Réseau Social Panafricain - Connexion authentique entre Africains" />
+    <meta name="twitter:url" content="https://social-app.com" />
 
-    <title>Social - Réseau Social</title>
+    <!-- LinkedIn -->
+    <meta property="og:image:secure_url" content="/og-image.png" />
+
+    <!-- WhatsApp -->
+    <meta property="og:image:secure_url" content="/og-image.png" />
+
+    <title>Social - Réseau Social Panafricain | Connectez l'Afrique</title>
   </head>
   <body>
     <div id="root"></div>

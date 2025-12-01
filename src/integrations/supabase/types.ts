@@ -3355,6 +3355,60 @@ export type Database = {
           },
         ]
       }
+      user_notification_settings: {
+        Row: {
+          comments: boolean | null
+          created_at: string | null
+          email_notifications: boolean | null
+          friend_requests: boolean | null
+          id: string
+          likes: boolean | null
+          messages: boolean | null
+          push_notifications: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          comments?: boolean | null
+          created_at?: string | null
+          email_notifications?: boolean | null
+          friend_requests?: boolean | null
+          id?: string
+          likes?: boolean | null
+          messages?: boolean | null
+          push_notifications?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          comments?: boolean | null
+          created_at?: string | null
+          email_notifications?: boolean | null
+          friend_requests?: boolean | null
+          id?: string
+          likes?: boolean | null
+          messages?: boolean | null
+          push_notifications?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notification_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notification_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       user_presence: {
         Row: {
           last_seen: string | null

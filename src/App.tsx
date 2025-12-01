@@ -13,6 +13,8 @@ import { UserProtectedRoute } from "@/components/UserProtectedRoute";
 import { UnreadProvider } from "@/contexts/UnreadContext";
 import { MessengerProvider } from "@/contexts/MessengerContext";
 import { supabase } from "@/integrations/supabase/client";
+import { usePresence } from "@/hooks/usePresence";
+
 
 import { RoutePreloader } from "@/components/RoutePreloader";
 
@@ -21,7 +23,6 @@ const Splash = lazy(() => import("./pages/Splash"));
 const Feed = lazy(() => import("./pages/Feed"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Notifications = lazy(() => import("./pages/Notifications"));
-const Messages = lazy(() => import("./pages/Messages"));
 const Profile = lazy(() => import("./pages/Profile"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const Admin = lazy(() => import("./pages/AdminDashboardNew"));
@@ -57,6 +58,7 @@ const Albums = lazy(() => import("./pages/Albums"));
 const Events = lazy(() => import("./pages/Events"));
 const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
 const VideoTest = lazy(() => import("./pages/VideoTest"));
+const Messages = lazy(() => import("./pages/Messages"));
 
 // OPTIMIZED QueryClient - Balanced speed + resilience
 const queryClient = new QueryClient({
@@ -108,6 +110,13 @@ const LoadingFallback = () => (
   </div>
 );
 
+// PRESENCE INITIALIZER - Démarre le système de présence pour tous les utilisateurs authentifiés
+const PresenceInitializer = () => {
+  console.log('🔍 Initializing presence system...');
+  usePresence(); // This initializes presence tracking for the current user
+  return null; // This component doesn't render anything
+};
+
 function AnimatedRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,7 +156,6 @@ function AnimatedRoutes() {
           <Route path="/privacy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><UserProtectedRoute><Notifications /></UserProtectedRoute></PageTransition>} />
           <Route path="/messages" element={<PageTransition><UserProtectedRoute><Messages /></UserProtectedRoute></PageTransition>} />
-          <Route path="/messages/:conversationId" element={<Navigate to="/messages" replace />} />
           <Route path="/profile/:username" element={<PageTransition><UserProtectedRoute><Profile /></UserProtectedRoute></PageTransition>} />
           <Route path="/profile/:userId" element={<PageTransition><UserProtectedRoute><Profile /></UserProtectedRoute></PageTransition>} />
           <Route path="/post/:postId" element={<PageTransition><PostDetail /></PageTransition>} />
@@ -196,6 +204,7 @@ const App = () => (
         <BrowserRouter>
           <UnreadProvider>
             <MessengerProvider>
+              <PresenceInitializer />
               <Toaster />
               <Sonner />
               <RoutePreloader />

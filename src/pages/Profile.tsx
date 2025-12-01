@@ -118,10 +118,10 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <Navbar />
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
         {/* Bannière de complétude (visible seulement pour le propriétaire) */}
         {isOwnProfile && <ProfileCompletenessBanner userId={profile.id} />}
 
@@ -134,34 +134,54 @@ export default function Profile() {
           onProfileUpdate={handleProfileUpdate}
         />
 
-        {/* Navigation par onglets Facebook-like */}
+        {/* Navigation par onglets moderne et professionnelle */}
         <Tabs defaultValue="journal" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 h-12">
-            <TabsTrigger value="journal" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              Journal
-            </TabsTrigger>
-            <TabsTrigger value="about" className="gap-2">
-              <Info className="h-4 w-4" />
-              À propos
-            </TabsTrigger>
-            <TabsTrigger value="friends" className="gap-2">
-              <Users className="h-4 w-4" />
-              Amis
-            </TabsTrigger>
-            <TabsTrigger value="photos" className="gap-2">
-              <Images className="h-4 w-4" />
-              Photos
-            </TabsTrigger>
-            <TabsTrigger value="videos" className="gap-2">
-              <Video className="h-4 w-4" />
-              Vidéos
-            </TabsTrigger>
-            <TabsTrigger value="more" className="gap-2">
-              <User className="h-4 w-4" />
-              Plus
-            </TabsTrigger>
-          </TabsList>
+          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 dark:border-gray-700/50 p-2 mb-8">
+            <TabsList className="grid w-full grid-cols-6 h-14 bg-transparent gap-2">
+              <TabsTrigger
+                value="journal"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-400 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <Calendar className="h-5 w-5" />
+                <span className="hidden sm:inline">Journal</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="about"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-400 data-[state=active]:to-green-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <Info className="h-5 w-5" />
+                <span className="hidden sm:inline">À propos</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="friends"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-400 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <Users className="h-5 w-5" />
+                <span className="hidden sm:inline">Communauté</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="photos"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-400 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <Images className="h-5 w-5" />
+                <span className="hidden sm:inline">Photos</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="videos"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <Video className="h-5 w-5" />
+                <span className="hidden sm:inline">Vidéos</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="more"
+                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-400 data-[state=active]:to-purple-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+              >
+                <User className="h-5 w-5" />
+                <span className="hidden sm:inline">Plus</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Contenu des onglets */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6">

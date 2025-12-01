@@ -37,18 +37,88 @@ body {
   touch-action: manipulation;
 }
 
-/* Mobile Typography Scale */
+/* Modern Professional Typography Scale - Africa Inspired */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+:root {
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Playfair Display', serif;
+}
+
+/* Global Typography */
+* {
+  font-family: var(--font-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+h2 {
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+h4 {
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+h5 {
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+h6 {
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+/* Body Text */
+body, p, span, div {
+  font-family: var(--font-primary);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+/* Bold Text */
+strong, b {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Mobile Typography Scale - Professional */
 @media (max-width: 640px) {
   html {
-    font-size: 14px;
+    font-size: 16px;
   }
 
-  h1 { font-size: 1.75rem; line-height: 1.2; }
-  h2 { font-size: 1.5rem; line-height: 1.3; }
-  h3 { font-size: 1.25rem; line-height: 1.4; }
-  h4 { font-size: 1.125rem; line-height: 1.4; }
-  h5 { font-size: 1rem; line-height: 1.4; }
-  h6 { font-size: 0.875rem; line-height: 1.5; }
+  h1 { font-size: 2rem; line-height: 1.1; letter-spacing: -0.04em; }
+  h2 { font-size: 1.75rem; line-height: 1.2; letter-spacing: -0.03em; }
+  h3 { font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.025em; }
+  h4 { font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.02em; }
+  h5 { font-size: 1.125rem; line-height: 1.4; letter-spacing: -0.015em; }
+  h6 { font-size: 1rem; line-height: 1.4; letter-spacing: -0.01em; }
+
+  body, p, span, div {
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
 }
 
 /* Mobile Container System */
@@ -391,5 +461,73 @@ body {
   .mobile-performance-reduced * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ==========================================
+   CUSTOM ANIMATIONS FOR SPLASH PAGE
+   ========================================== */
+
+/* Letter-by-letter animation for "social" */
+@keyframes letter-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Floating animation for background orbs */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+/* Progress bar animation */
+@keyframes progress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+/* Grow width animation for underlines */
+@keyframes grow-width {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+/* Scale in animation */
+@keyframes scale-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
   }
 }

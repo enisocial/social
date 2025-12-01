@@ -103,59 +103,90 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      {/* Left Sidebar */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 to-accent/10 p-12 flex-col justify-center">
-        <div className="max-w-lg">
-          <div className="flex items-center gap-3 mb-6">
-            <img 
-              src="/icon-192.png" 
-              alt="Logo" 
-              className="w-14 h-14 rounded-2xl shadow-glow"
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Header with Logo */}
+      <div className="flex justify-center items-center p-8 bg-white border-b border-slate-200">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl shadow-xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+            <img
+              src="/icon-192.png"
+              alt="Logo"
+              className="w-8 h-8"
             />
-            <h1 className="text-5xl font-bold">
-              <span className="text-primary">s</span>ocial
-            </h1>
           </div>
-          
-          <h2 className="text-2xl font-semibold mb-4 text-foreground">
-            Connectez-vous avec le monde
-          </h2>
-          
-          <p className="text-muted-foreground text-lg leading-relaxed">
-            Rejoignez une communauté dynamique où vous pouvez partager vos moments, découvrir de nouvelles passions et rester connecté avec vos proches.
-          </p>
+          <div>
+            <h1 className="text-4xl font-black text-slate-900">
+              <span className="text-amber-500">s</span>ocial
+            </h1>
+            <div className="h-0.5 w-12 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full mt-1"></div>
+          </div>
         </div>
       </div>
 
-      {/* Right Side - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-md">
-          <div className="bg-card rounded-2xl shadow-lg p-8 sm:p-10">
+      {/* Main Content - Centered Single Column */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-lg">
+          {/* Hero Section */}
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">
+              Connectez-vous avec <span className="text-amber-500">l'Afrique</span>
+            </h2>
+            <p className="text-slate-600 text-lg leading-relaxed max-w-md mx-auto">
+              Rejoignez la communauté panafricaine où vous pouvez partager vos histoires, découvrir de nouvelles cultures et rester connecté avec votre continent.
+            </p>
+
+            {/* African-inspired elements */}
+            <div className="flex justify-center gap-8 mt-8">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl mx-auto mb-2 flex items-center justify-center shadow-lg">
+                  <div className="w-6 h-6 bg-white rounded-lg"></div>
+                </div>
+                <p className="text-sm font-semibold text-slate-700">Communauté</p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl mx-auto mb-2 flex items-center justify-center shadow-lg">
+                  <div className="w-6 h-6 bg-white rounded-lg"></div>
+                </div>
+                <p className="text-sm font-semibold text-slate-700">Culture</p>
+              </div>
+              <div className="text-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl mx-auto mb-2 flex items-center justify-center shadow-lg">
+                  <div className="w-6 h-6 bg-white rounded-lg"></div>
+                </div>
+                <p className="text-sm font-semibold text-slate-700">Connexion</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Auth Form Card */}
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 p-8">
             {activeTab === 'signin' ? (
               <>
-                <div className="mb-8">
-                  <h2 className="text-3xl font-bold mb-2">Bon retour !</h2>
-                  <p className="text-muted-foreground">Connectez-vous pour continuer</p>
+                <div className="mb-8 text-center">
+                  <h2 className="text-3xl font-bold mb-3 text-slate-900">Bon retour !</h2>
+                  <p className="text-slate-600">Connectez-vous pour continuer votre voyage africain</p>
                 </div>
 
                 <Form {...signInForm}>
-                  <form onSubmit={signInForm.handleSubmit(handleSignIn)} className="space-y-5">
+                  <form onSubmit={signInForm.handleSubmit(handleSignIn)} className="space-y-6">
                     <FormField
                       control={signInForm.control}
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Email</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Adresse email</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                              <Input 
-                                type="email" 
-                                placeholder="vous@exemple.com" 
-                                className="pl-10 h-12"
-                                {...field} 
-                              />
+                            <div className="relative group">
+                              <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-orange-400/20 rounded-xl blur-sm group-focus-within:from-amber-400/30 group-focus-within:to-orange-400/30 transition-all duration-300"></div>
+                              <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-500" />
+                                <Input
+                                  type="email"
+                                  placeholder="votre.email@exemple.com"
+                                  className="pl-12 pr-4 h-14 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                                  {...field}
+                                />
+                              </div>
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -168,23 +199,26 @@ const Auth = () => {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Mot de passe</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Mot de passe</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                              <Input 
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••" 
-                                className="pl-10 pr-10 h-12"
-                                {...field} 
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                              >
-                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                              </button>
+                            <div className="relative group">
+                              <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-yellow-400/20 rounded-xl blur-sm group-focus-within:from-orange-400/30 group-focus-within:to-yellow-400/30 transition-all duration-300"></div>
+                              <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-500" />
+                                <Input
+                                  type={showPassword ? "text" : "password"}
+                                  placeholder="••••••••"
+                                  className="pl-12 pr-12 h-14 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                                  {...field}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-amber-500 transition-colors"
+                                >
+                                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
+                              </div>
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -193,30 +227,37 @@ const Auth = () => {
                     />
 
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id="remember" 
-                          checked={rememberMe}
-                          onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                        />
-                        <label
-                          htmlFor="remember"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          Se souvenir de moi
-                        </label>
+                      <div className="flex items-center space-x-3">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            id="remember"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="w-4 h-4 text-amber-500 bg-white/80 border-2 border-amber-300 rounded focus:ring-amber-500 focus:ring-2"
+                          />
+                          <label
+                            htmlFor="remember"
+                            className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer ml-2"
+                          >
+                            Se souvenir de moi
+                          </label>
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setShowForgotPassword(true)}
-                        className="text-sm text-primary hover:underline font-medium"
+                        className="text-sm text-amber-600 hover:text-amber-700 font-semibold transition-colors"
                       >
                         Mot de passe oublié ?
                       </button>
                     </div>
 
-                    <Button type="submit" className="w-full h-12 gradient-primary text-white text-base font-semibold">
-                      Se connecter
+                    <Button
+                      type="submit"
+                      className="w-full h-14 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-lg font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
+                    >
+                      Se connecter à la communauté
                     </Button>
                   </form>
                 </Form>
@@ -267,41 +308,47 @@ const Auth = () => {
               </>
             ) : (
               <>
-                <div className="mb-8">
-                  <h2 className="text-3xl font-bold mb-2">Créer un compte</h2>
-                  <p className="text-muted-foreground">Rejoignez social aujourd'hui</p>
+                <div className="mb-8 text-center">
+                  <h2 className="text-3xl font-bold mb-3 text-slate-900">Créer un compte</h2>
+                  <p className="text-slate-600">Rejoignez la communauté panafricaine</p>
                 </div>
 
                 <Form {...signUpForm}>
-                  <form onSubmit={signUpForm.handleSubmit(handleSignUp)} className="space-y-4">
+                  <form onSubmit={signUpForm.handleSubmit(handleSignUp)} className="space-y-5">
                     <div className="space-y-2">
-                      <label htmlFor="name" className="text-sm font-medium">Nom complet</label>
-                      <input 
-                        id="name"
-                        type="text"
-                        placeholder="Jean Dupont" 
-                        className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={nameValue}
-                        onChange={(e) => {
-                          setNameValue(e.target.value);
-                          signUpForm.setValue('name', e.target.value);
-                        }}
-                      />
+                      <label htmlFor="name" className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nom complet</label>
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-xl blur-sm group-focus-within:from-blue-400/30 group-focus-within:to-purple-400/30 transition-all duration-300"></div>
+                        <input
+                          id="name"
+                          type="text"
+                          placeholder="Jean Dupont"
+                          className="relative w-full h-12 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl px-4 text-gray-800 dark:text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          value={nameValue}
+                          onChange={(e) => {
+                            setNameValue(e.target.value);
+                            signUpForm.setValue('name', e.target.value);
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label htmlFor="username" className="text-sm font-medium">Nom d'utilisateur</label>
-                      <input 
-                        id="username"
-                        type="text"
-                        placeholder="jeandupont" 
-                        className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={usernameValue}
-                        onChange={(e) => {
-                          setUsernameValue(e.target.value);
-                          signUpForm.setValue('username', e.target.value);
-                        }}
-                      />
+                      <label htmlFor="username" className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nom d'utilisateur</label>
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-teal-400/20 rounded-xl blur-sm group-focus-within:from-green-400/30 group-focus-within:to-teal-400/30 transition-all duration-300"></div>
+                        <input
+                          id="username"
+                          type="text"
+                          placeholder="jeandupont"
+                          className="relative w-full h-12 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl px-4 text-gray-800 dark:text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                          value={usernameValue}
+                          onChange={(e) => {
+                            setUsernameValue(e.target.value);
+                            signUpForm.setValue('username', e.target.value);
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <FormField
@@ -309,16 +356,19 @@ const Auth = () => {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Email</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Adresse email</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                              <Input 
-                                type="email" 
-                                placeholder="vous@exemple.com" 
-                                className="pl-10 h-11"
-                                {...field} 
-                              />
+                            <div className="relative group">
+                              <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-orange-400/20 rounded-xl blur-sm group-focus-within:from-amber-400/30 group-focus-within:to-orange-400/30 transition-all duration-300"></div>
+                              <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-500" />
+                                <Input
+                                  type="email"
+                                  placeholder="votre.email@exemple.com"
+                                  className="pl-12 pr-4 h-12 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                                  {...field}
+                                />
+                              </div>
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -331,23 +381,26 @@ const Auth = () => {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Mot de passe</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Mot de passe</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                              <Input 
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••" 
-                                className="pl-10 pr-10 h-11"
-                                {...field} 
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                              >
-                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                              </button>
+                            <div className="relative group">
+                              <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-yellow-400/20 rounded-xl blur-sm group-focus-within:from-orange-400/30 group-focus-within:to-yellow-400/30 transition-all duration-300"></div>
+                              <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-500" />
+                                <Input
+                                  type={showPassword ? "text" : "password"}
+                                  placeholder="••••••••"
+                                  className="pl-12 pr-12 h-12 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                                  {...field}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-amber-500 transition-colors"
+                                >
+                                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
+                              </div>
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -360,16 +413,19 @@ const Auth = () => {
                       name="confirmPassword"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Confirmer le mot de passe</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">Confirmer le mot de passe</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                              <Input 
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••" 
-                                className="pl-10 h-11"
-                                {...field} 
-                              />
+                            <div className="relative group">
+                              <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 to-red-400/20 rounded-xl blur-sm group-focus-within:from-yellow-400/30 group-focus-within:to-red-400/30 transition-all duration-300"></div>
+                              <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-yellow-500" />
+                                <Input
+                                  type="password"
+                                  placeholder="••••••••"
+                                  className="pl-12 pr-4 h-12 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                                  {...field}
+                                />
+                              </div>
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -377,8 +433,11 @@ const Auth = () => {
                       )}
                     />
 
-                    <Button type="submit" className="w-full h-12 gradient-primary text-white text-base font-semibold mt-6">
-                      Créer un compte
+                    <Button
+                      type="submit"
+                      className="w-full h-14 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-lg font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] mt-6"
+                    >
+                      Rejoindre la communauté
                     </Button>
                   </form>
                 </Form>
@@ -415,46 +474,63 @@ const Auth = () => {
         </div>
       </div>
 
-      {/* Modal de mot de passe oublié */}
+      {/* Modal de mot de passe oublié avec design africain */}
       {showForgotPassword && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-card rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold mb-4">Mot de passe oublié ?</h2>
-            <p className="text-muted-foreground mb-6">
-              Entrez votre adresse e-mail et nous vous enverrons un lien pour réinitialiser votre mot de passe.
-            </p>
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <label htmlFor="reset-email" className="text-sm font-medium mb-2 block">
-                  Adresse e-mail
-                </label>
-                <Input
-                  id="reset-email"
-                  type="email"
-                  placeholder="vous@exemple.com"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  required
-                  className="h-11"
-                />
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowForgotPassword(false);
-                    setResetEmail('');
-                  }}
-                  className="flex-1"
-                >
-                  Annuler
-                </Button>
-                <Button type="submit" className="flex-1 gradient-primary text-white">
-                  Envoyer
-                </Button>
-              </div>
-            </form>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 dark:border-gray-600/30 p-8 max-w-md w-full relative overflow-hidden">
+            {/* Motif africain subtil dans le modal */}
+            <div className="absolute top-0 right-0 w-24 h-24 opacity-5">
+              <div className="absolute inset-0 border-4 border-amber-400 rounded-full transform rotate-45"></div>
+              <div className="absolute inset-2 border-2 border-orange-400 rounded-full"></div>
+            </div>
+
+            <div className="relative z-10">
+              <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent text-center">Mot de passe oublié ?</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 text-center">
+                Entrez votre adresse e-mail et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+              </p>
+              <form onSubmit={handleForgotPassword} className="space-y-6">
+                <div className="space-y-2">
+                  <label htmlFor="reset-email" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Adresse e-mail
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-orange-400/20 rounded-xl blur-sm group-focus-within:from-amber-400/30 group-focus-within:to-orange-400/30 transition-all duration-300"></div>
+                    <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-white/30 dark:border-gray-600/30 rounded-xl">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-500" />
+                      <Input
+                        id="reset-email"
+                        type="email"
+                        placeholder="votre.email@exemple.com"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required
+                        className="pl-12 pr-4 h-12 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-gray-200 placeholder:text-gray-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setResetEmail('');
+                    }}
+                    className="flex-1 bg-white/60 hover:bg-white/80 border-amber-200 hover:border-amber-300"
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
+                  >
+                    Envoyer
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

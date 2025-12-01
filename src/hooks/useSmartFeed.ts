@@ -1,7 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCallback, useEffect, useMemo } from 'react';
-import { cacheService, CACHE_KEYS, callSupabaseEdgeFunction } from '@/services/cache.service';
 
 interface SmartFeedPost {
   id: string;
@@ -69,17 +68,7 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
       const pageSize = 10;
       const offset = pageParam * pageSize;
 
-      console.log(`🚀 ULTRA FAST FEED LOAD: page ${pageParam}, filter ${filterType}`);
-
-      // STRATÉGIE ULTRA-RAPIDE: Cache agressif + prefetching
-      const cacheKey = `ultra-fast-feed-${userId}-${filterType}-${pageParam}`;
-
-      // Vérifier cache ultra-rapide d'abord
-      const cachedData = cacheService.get<{ posts: SmartFeedPost[]; nextOffset: number | null }>(cacheKey);
-      if (cachedData) {
-        console.log(`⚡ ULTRA CACHE HIT: ${cachedData.posts.length} posts from cache`);
-        return cachedData;
-      }
+      console.log(`🚀 FEED LOAD: page ${pageParam}, filter ${filterType}`);
 
       try {
         // REQUÊTE ULTRA-OPTIMISÉE avec toutes les jointures en une seule requête
@@ -107,26 +96,33 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
 
         if (!rawPosts || rawPosts.length === 0) {
           const emptyResult = { posts: [], nextOffset: null };
-          cacheService.set(cacheKey, emptyResult, 30 * 1000); // Cache 30 secondes
           return emptyResult;
         }
 
         // CALCUL ULTRA-RAPIDE des statistiques (parallèle)
         const postIds = rawPosts.map(p => p.id);
-        const [likesData, commentsData, userLikesData] = await Promise.all([
+        const [likesData, commentsData, userLikesData, viewsData] = await Promise.all([
           supabase.from('likes').select('post_id', { count: 'exact' }).in('post_id', postIds),
           supabase.from('comments').select('post_id', { count: 'exact' }).in('post_id', postIds),
-          supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', userId)
+          supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', userId),
+          supabase.from('engagement_signals').select('post_id', { count: 'exact' }).in('post_id', postIds).eq('signal_type', 'view')
         ]);
 
         // TRAITEMENT ULTRA-RAPIDE des statistiques
         const likesCount: Record<string, number> = {};
         const commentsCount: Record<string, number> = {};
+        const viewsCount: Record<string, number> = {};
         const userLikedSet = new Set<string>();
 
         likesData.data?.forEach(like => { likesCount[like.post_id] = (likesCount[like.post_id] || 0) + 1; });
         commentsData.data?.forEach(comment => { commentsCount[comment.post_id] = (commentsCount[comment.post_id] || 0) + 1; });
+        viewsData.data?.forEach(view => {
+          viewsCount[view.post_id] = (viewsCount[view.post_id] || 0) + 1;
+        });
         userLikesData.data?.forEach(like => userLikedSet.add(like.post_id));
+
+        console.log(`📊 FEED STATS: ${postIds.length} posts, views data:`, viewsData.data?.length || 0, 'records');
+        console.log('👁️ Views counts:', viewsCount);
 
         // TRANSFORMATION ULTRA-RAPIDE des données
         const posts: SmartFeedPost[] = rawPosts.map(post => ({
@@ -144,7 +140,7 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
           likes_count: likesCount[post.id] || 0,
           comments_count: commentsCount[post.id] || 0,
           shares_count: 0,
-          views_count: 0,
+          views_count: viewsCount[post.id] || 0,
           user_liked: userLikedSet.has(post.id),
           relevance_score: 0,
           engagement_prediction: 0,
@@ -158,10 +154,7 @@ export const useSmartFeed = (userId: string | undefined, filterType: 'recommende
           nextOffset: posts.length === pageSize ? pageParam + 1 : null
         };
 
-        // CACHE ULTRA-AGRESSIF: 5 minutes pour éviter les rechargements
-        cacheService.set(cacheKey, result, 5 * 60 * 1000);
-
-        console.log(`✅ ULTRA FAST FEED SUCCESS: ${posts.length} posts loaded and cached`);
+        console.log(`✅ FEED SUCCESS: ${posts.length} posts loaded`);
         return result;
 
       } catch (err) {

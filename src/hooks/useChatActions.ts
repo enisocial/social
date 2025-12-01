@@ -1,11 +1,38 @@
 import { useMessenger } from '@/contexts/MessengerContext';
 import { useConversations } from '@/hooks/useConversations';
 import { supabase } from '@/integrations/supabase/client';
-import { cacheService } from '@/services/cache.service';
-import { CACHE_CONFIG } from '@/config/app.config';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+
+// Simple cache service replacement
+const simpleCache = {
+  get: <T>(key: string): T | null => {
+    try {
+      const item = localStorage.getItem(key);
+      if (!item) return null;
+
+      const parsed = JSON.parse(item);
+      if (Date.now() > parsed.expiry) {
+        localStorage.removeItem(key);
+        return null;
+      }
+
+      return parsed.value;
+    } catch {
+      return null;
+    }
+  },
+
+  set: <T>(key: string, value: T, ttlMs: number = 5 * 60 * 1000): void => {
+    try {
+      const expiry = Date.now() + ttlMs;
+      localStorage.setItem(key, JSON.stringify({ value, expiry }));
+    } catch {
+      // Ignore cache errors
+    }
+  }
+};
 
 export const useChatActions = () => {
   const { openBubble } = useMessenger();
@@ -20,7 +47,7 @@ export const useChatActions = () => {
     try {
       // 1. Get User Info (Cache -> Supabase)
       const userCacheKey = `chat_user_${userId}`;
-      let userData = userInfo || cacheService.get<typeof userInfo>(userCacheKey);
+      let userData = userInfo || simpleCache.get<typeof userInfo>(userCacheKey);
 
       if (!userData) {
         const { data: profile } = await supabase
@@ -31,7 +58,7 @@ export const useChatActions = () => {
 
         if (profile) {
           userData = profile;
-          cacheService.set(userCacheKey, profile, CACHE_CONFIG.LONG_CACHE);
+          simpleCache.set(userCacheKey, profile, 10 * 60 * 1000); // 10 minutes
         }
       }
 
@@ -43,13 +70,13 @@ export const useChatActions = () => {
       // 2. Get Conversation ID (Cache -> Create/Fetch)
       // We cache the conversation ID for this user pair to avoid "temp" IDs and UI flickering
       const convCacheKey = `chat_conv_id_${userId}`;
-      let conversationId = cacheService.get<string>(convCacheKey);
+      let conversationId = simpleCache.get<string>(convCacheKey);
 
       if (!conversationId) {
         // If not in cache, create/fetch it
         conversationId = await createConversation(userId);
         if (conversationId) {
-          cacheService.set(convCacheKey, conversationId, CACHE_CONFIG.LONG_CACHE);
+          simpleCache.set(convCacheKey, conversationId, 10 * 60 * 1000); // 10 minutes
         }
       }
 
