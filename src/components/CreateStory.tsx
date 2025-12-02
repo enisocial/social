@@ -5,7 +5,12 @@ import { Progress } from '@/components/ui/progress';
 import { Image, Video, Upload } from 'lucide-react';
 
 interface CreateStoryProps {
-  onCreateStory: (file: File) => void;
+  onCreateStory: (file: File, textOverlay?: {
+    text: string;
+    text_position: { x: number; y: number };
+    text_color: string;
+    text_size: number;
+  }) => void;
   children?: React.ReactNode;
   uploadProgress?: number;
   isUploading?: boolean;

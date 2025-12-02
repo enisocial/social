@@ -128,10 +128,7 @@ export const StoryViewer = ({
           <div>
             <p className="text-white font-semibold">{currentGroup.name}</p>
             <p className="text-white/80 text-sm">
-              {formatDistanceToNow(new Date(currentStory.created_at), { 
-                addSuffix: true, 
-                locale: fr 
-              })}
+              Story active
             </p>
           </div>
         </div>
@@ -222,6 +219,31 @@ export const StoryViewer = ({
             className="max-w-full max-h-full object-contain"
             onEnded={handleNext}
           />
+        )}
+
+        {/* Text Overlay */}
+        {currentStory.text && currentStory.text.trim() && (
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: `${currentStory.text_position?.x || 50}%`,
+              top: `${currentStory.text_position?.y || 50}%`,
+              transform: 'translate(-50%, -50%)',
+              color: currentStory.text_color || '#ffffff',
+              fontSize: `${Math.max(12, Math.min(48, currentStory.text_size || 24))}px`,
+              fontWeight: 'bold',
+              textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+              textAlign: 'center',
+              maxWidth: '80%',
+              wordWrap: 'break-word',
+              lineHeight: '1.2',
+              padding: '4px 8px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(0,0,0,0.3)'
+            }}
+          >
+            {currentStory.text}
+          </div>
         )}
       </div>
 

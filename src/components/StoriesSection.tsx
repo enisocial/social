@@ -22,11 +22,16 @@ export const StoriesSection = () => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
 
-  const handleCreateStory = async (file: File) => {
+  const handleCreateStory = async (file: File, textOverlay?: {
+    text: string;
+    text_position: { x: number; y: number };
+    text_color: string;
+    text_size: number;
+  }) => {
     if (!user) return;
 
     try {
-      await createStory(file);
+      await createStory(file, textOverlay);
       toast.success('Story créée avec succès');
     } catch (error) {
       console.error('Error creating story:', error);

@@ -2873,6 +2873,11 @@ export type Database = {
           id: string
           media_type: string
           media_url: string
+          text: string | null
+          text_color: string | null
+          text_position: Json | null
+          text_size: number | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -2881,6 +2886,11 @@ export type Database = {
           id?: string
           media_type: string
           media_url: string
+          text?: string | null
+          text_color?: string | null
+          text_position?: Json | null
+          text_size?: number | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -2889,6 +2899,11 @@ export type Database = {
           id?: string
           media_type?: string
           media_url?: string
+          text?: string | null
+          text_color?: string | null
+          text_position?: Json | null
+          text_size?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
