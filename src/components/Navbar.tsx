@@ -67,6 +67,9 @@ export const Navbar = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  // Éviter tout affichage temporaire si le profil n'est pas complètement chargé
+  const isProfileLoaded = profile && profile.name && profile.username && typeof profile.name === 'string' && typeof profile.username === 'string';
+
   const { data: isAdmin } = useQuery({
     queryKey: ['user-role', user?.id],
     queryFn: async () => {
@@ -294,7 +297,7 @@ export const Navbar = () => {
                   <Avatar className="w-full h-full border-2 border-emerald-200/50 dark:border-emerald-800/50 group-hover:border-emerald-300 dark:group-hover:border-emerald-700 transition-colors">
                     <AvatarImage src={profile?.avatar_url || ''} alt={profile?.name} />
                     <AvatarFallback className="bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900 dark:to-teal-900 text-emerald-700 dark:text-emerald-300 font-semibold">
-                      {profile?.name?.charAt(0)?.toUpperCase() || 'U'}
+                      {isProfileLoaded ? profile.name.charAt(0).toUpperCase() : 'U'}
                     </AvatarFallback>
                   </Avatar>
 
@@ -314,12 +317,12 @@ export const Navbar = () => {
                     <Avatar className="w-12 h-12 border-2 border-emerald-200/50">
                       <AvatarImage src={profile?.avatar_url || ''} alt={profile?.name} />
                       <AvatarFallback className="bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900 dark:to-teal-900 text-emerald-700 dark:text-emerald-300 font-semibold">
-                        {profile?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        {isProfileLoaded ? profile.name.charAt(0).toUpperCase() : 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-bold text-gray-800 dark:text-gray-200">{profile?.name}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">@{profile?.username}</p>
+                      <p className="font-bold text-gray-800 dark:text-gray-200">{isProfileLoaded ? profile.name : 'Chargement...'}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{isProfileLoaded ? `@${profile.username}` : '@chargement'}</p>
                     </div>
                   </div>
                 </div>
@@ -430,20 +433,20 @@ export const Navbar = () => {
             <SheetContent side="right" className="w-64">
               <div className="flex flex-col gap-6 mt-8">
                 {/* Profile Section */}
-                <Link 
-                  to={`/profile/${profile?.username}`} 
+                <Link
+                  to={isProfileLoaded ? `/profile/${profile.username}` : '#'}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={profile?.avatar_url || ''} alt={profile?.name} />
                     <AvatarFallback>
-                      {profile?.name?.charAt(0)?.toUpperCase() || 'U'}
+                      {isProfileLoaded ? profile.name.charAt(0).toUpperCase() : 'U'}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-semibold">{profile?.name}</p>
-                    <p className="text-sm text-muted-foreground">@{profile?.username}</p>
+                    <p className="font-semibold">{isProfileLoaded ? profile.name : 'Chargement...'}</p>
+                    <p className="text-sm text-muted-foreground">{isProfileLoaded ? `@${profile.username}` : '@chargement'}</p>
                   </div>
                 </Link>
 

@@ -52,6 +52,8 @@ const AlbumDetail = lazy(() => import("./pages/AlbumDetail"));
 const TermsOfService = lazy(() => import("./pages/Terms"));
 const PrivacyPolicy = lazy(() => import("./pages/Privacy"));
 const Help = lazy(() => import("./pages/Help"));
+const HelpCenter = lazy(() => import("./pages/HelpCenter"));
+const ReportIssue = lazy(() => import("./pages/ReportIssue"));
 const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const GeolocationTest = lazy(() => import("./components/GeolocationTest"));
 const Albums = lazy(() => import("./pages/Albums"));
@@ -152,6 +154,8 @@ function AnimatedRoutes() {
           <Route path="/explore" element={<PageTransition><UserProtectedRoute><Explore /></UserProtectedRoute></PageTransition>} />
           <Route path="/auth" element={<PageTransition><Auth /></PageTransition>} />
           <Route path="/help" element={<PageTransition><Help /></PageTransition>} />
+          <Route path="/help-center" element={<PageTransition><UserProtectedRoute><HelpCenter /></UserProtectedRoute></PageTransition>} />
+          <Route path="/report-issue" element={<PageTransition><UserProtectedRoute><ReportIssue /></UserProtectedRoute></PageTransition>} />
           <Route path="/terms" element={<PageTransition><TermsOfService /></PageTransition>} />
           <Route path="/privacy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><UserProtectedRoute><Notifications /></UserProtectedRoute></PageTransition>} />

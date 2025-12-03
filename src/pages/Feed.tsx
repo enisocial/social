@@ -156,8 +156,8 @@ const Feed = () => {
     // Footer with actions - TOUJOURS COMPTE
     size += 80; // Fixed footer height
 
-    // Margin between posts
-    size += 24;
+    // Margin between posts - Minimal spacing for ultra-modern dense layout (~2mm)
+    size += 8;
 
     return Math.min(size, 1200); // Cap at 1200px
   }, [posts]);
@@ -508,7 +508,7 @@ const Feed = () => {
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                 >
-                  <div className="px-2 py-1">
+                  <div className="px-0.5 py-1">
                     <EnhancedPostCard
                       post={post}
                       onDelete={invalidateFeedCache}

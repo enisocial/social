@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Users, Settings, UserPlus, MessageSquare } from "lucide-react";
+import { ArrowLeft, Users, Settings, UserPlus, MessageSquare, Globe, Lock } from "lucide-react";
 import { useGroup } from "@/hooks/useGroups";
 import { useGroupMembers } from "@/hooks/useGroupMembers";
 import { useGroupPosts } from "@/hooks/useGroupPosts";
@@ -104,35 +104,81 @@ export default function GroupDetail() {
           Retour aux groupes
         </Button>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start gap-6">
-              <Avatar className="h-24 w-24">
-                <AvatarImage src={group.avatar_url || ""} />
-                <AvatarFallback>{group.name[0]}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className="text-3xl font-bold">{group.name}</h1>
-                    <p className="text-muted-foreground mt-2">{group.description}</p>
-                    <div className="flex items-center gap-4 mt-4">
-                      <Badge variant={group.privacy === 'public' ? 'default' : 'secondary'}>
+        {/* Hero Header Section */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 border border-white/50 dark:border-gray-800/50">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-blue-200/20 to-purple-200/20 rounded-full blur-3xl -translate-y-48 translate-x-48"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-indigo-200/20 to-pink-200/20 rounded-full blur-3xl translate-y-32 -translate-x-32"></div>
+
+          <div className="relative p-8">
+            <div className="flex flex-col lg:flex-row items-start gap-8">
+              <div className="relative">
+                <Avatar className="h-32 w-32 ring-4 ring-white/50 dark:ring-gray-700/50 shadow-2xl">
+                  <AvatarImage src={group.avatar_url || ""} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-4xl font-bold">
+                    {group.name[0]}
+                  </AvatarFallback>
+                </Avatar>
+                {group.privacy === 'private' && (
+                  <div className="absolute -top-2 -right-2 p-2 bg-gray-900 dark:bg-gray-100 rounded-full shadow-lg">
+                    <Lock className="h-5 w-5 text-white dark:text-gray-900" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                  <div className="flex-1">
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent mb-3">
+                      {group.name}
+                    </h1>
+                    {group.description && (
+                      <p className="text-lg text-muted-foreground leading-relaxed mb-4 max-w-2xl">
+                        {group.description}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-6 text-sm">
+                      <Badge
+                        variant={group.privacy === 'public' ? 'default' : 'secondary'}
+                        className={`px-4 py-2 text-sm font-medium ${
+                          group.privacy === 'public'
+                            ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                            : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                        }`}
+                      >
+                        <Globe className="h-4 w-4 mr-2" />
                         {group.privacy === 'public' ? 'Public' : 'Privé'}
                       </Badge>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                        {group.member_count} membre{group.member_count > 1 ? 's' : ''}
+
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/60 dark:bg-gray-800/60 rounded-full border border-white/50 dark:border-gray-700/50 backdrop-blur-sm">
+                        <Users className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          {group.member_count} membre{group.member_count > 1 ? 's' : ''}
+                        </span>
                       </div>
+
+                      {isMember && (
+                        <Badge className={`px-3 py-1 text-xs font-medium ${
+                          group.user_role === 'admin'
+                            ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white'
+                            : group.user_role === 'moderator'
+                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                            : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                        }`}>
+                          {group.user_role === 'admin' ? 'Administrateur' :
+                           group.user_role === 'moderator' ? 'Modérateur' : 'Membre'}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+
+                  <div className="flex flex-col gap-3">
                     {!isMember && (
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Rejoindre
+                          <Button size="lg" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                            <UserPlus className="mr-2 h-5 w-5" />
+                            Rejoindre le groupe
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -161,8 +207,8 @@ export default function GroupDetail() {
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {isMember && (
           <Tabs defaultValue="posts" className="space-y-6">

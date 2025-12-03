@@ -120,6 +120,38 @@ export const useComments = (postId: string, limit: number = 10) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Créer le nouveau commentaire localement pour affichage immédiat
+    const newComment: Comment = {
+      id: `temp_${Date.now()}`, // ID temporaire
+      text,
+      created_at: new Date().toISOString(),
+      user_id: user.id,
+      post_id: postId,
+      parent_comment_id: parentCommentId || null,
+      like_count: 0,
+      reply_count: 0,
+      profiles: {
+        username: user.user_metadata?.username || '',
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'Utilisateur',
+        avatar_url: user.user_metadata?.avatar_url || null
+      }
+    };
+
+    // Ajouter immédiatement à l'état local pour affichage instantané
+    if (parentCommentId) {
+      // Si c'est une réponse, l'ajouter aux replies du parent
+      setComments(prevComments =>
+        prevComments.map(comment =>
+          comment.id === parentCommentId
+            ? { ...comment, replies: [...(comment.replies || []), newComment] }
+            : comment
+        )
+      );
+    } else {
+      // Ajouter comme nouveau commentaire principal
+      setComments(prevComments => [newComment, ...prevComments]);
+    }
+
     const { error } = await supabase
       .from('comments')
       .insert({
@@ -131,6 +163,18 @@ export const useComments = (postId: string, limit: number = 10) => {
 
     if (error) {
       toast.error('Erreur lors de l\'ajout du commentaire');
+      // En cas d'erreur, retirer le commentaire temporaire
+      if (parentCommentId) {
+        setComments(prevComments =>
+          prevComments.map(comment =>
+            comment.id === parentCommentId
+              ? { ...comment, replies: (comment.replies || []).filter(r => r.id !== newComment.id) }
+              : comment
+          )
+        );
+      } else {
+        setComments(prevComments => prevComments.filter(c => c.id !== newComment.id));
+      }
       return;
     }
 
@@ -138,6 +182,27 @@ export const useComments = (postId: string, limit: number = 10) => {
   };
 
   const deleteComment = async (commentId: string) => {
+    // Supprimer immédiatement de l'état local pour un feedback instantané
+    setComments(prevComments =>
+      prevComments.filter(comment => {
+        // Supprimer le commentaire principal
+        if (comment.id === commentId) {
+          return false;
+        }
+        // Supprimer des replies si c'est une réponse
+        if (comment.replies) {
+          comment.replies = comment.replies.filter(reply => reply.id !== commentId);
+        }
+        return true;
+      })
+    );
+
+    // Si c'est un commentaire temporaire, ne pas essayer de le supprimer en DB
+    if (commentId.startsWith('temp_')) {
+      toast.success('Commentaire supprimé');
+      return;
+    }
+
     const { error } = await supabase
       .from('comments')
       .delete()
@@ -145,6 +210,10 @@ export const useComments = (postId: string, limit: number = 10) => {
 
     if (error) {
       toast.error('Erreur lors de la suppression');
+      // Restaurer le commentaire en cas d'erreur (sauf pour les temporaires)
+      if (!commentId.startsWith('temp_')) {
+        fetchComments(true); // Recharger pour restaurer
+      }
       return;
     }
 

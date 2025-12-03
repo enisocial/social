@@ -288,6 +288,31 @@ export const ProfileHeader = ({
     loaded: videoLoaded
   });
 
+  // S'assurer que le profil a TOUTES les données critiques avant d'afficher
+  if (!profile ||
+      !profile.name ||
+      !profile.username ||
+      !profile.id ||
+      typeof profile.name !== 'string' ||
+      typeof profile.username !== 'string') {
+    return (
+      <Card className="overflow-hidden">
+        <div className="relative h-[400px] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+        <div className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+            <div className="space-y-2">
+              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32 animate-pulse"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
       {/* Cover Photo/Video */}

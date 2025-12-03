@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { playNotificationSound } from '@/utils/notification-sound';
@@ -27,7 +27,6 @@ const PAGE_SIZE = 20;
 export const useNotifications = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [unreadCount, setUnreadCount] = useState(0);
 
   // Fetch notifications with pagination using cached edge function
   const {
@@ -40,7 +39,7 @@ export const useNotifications = () => {
   } = useInfiniteQuery({
     queryKey: ['notifications', user?.id],
     queryFn: async ({ pageParam = 0 }) => {
-      if (!user) return { notifications: [], unreadCount: 0, nextPage: null };
+      if (!user) return { notifications: [], nextPage: null };
 
       const { data: response, error } = await supabase.functions.invoke('cached-notifications', {
         body: {
@@ -50,11 +49,6 @@ export const useNotifications = () => {
       });
 
       if (error) throw error;
-
-      // Update unread count from cached response
-      if (response.unreadCount !== undefined) {
-        setUnreadCount(response.unreadCount);
-      }
 
       return {
         notifications: response.notifications as Notification[],
@@ -67,6 +61,24 @@ export const useNotifications = () => {
     staleTime: 60000, // 1 minute cache on client-side
     gcTime: 300000, // 5 minutes
     refetchOnWindowFocus: false
+  });
+
+  // Simple query for unread count only
+  const { data: unreadData } = useQuery({
+    queryKey: ['notifications-unread', user?.id],
+    queryFn: async () => {
+      if (!user) return { unreadCount: 0 };
+
+      const { data: response, error } = await supabase.functions.invoke('cached-notifications', {
+        body: { countOnly: true }
+      });
+
+      if (error) return { unreadCount: 0 };
+      return { unreadCount: response.unreadCount || 0 };
+    },
+    enabled: !!user,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 10000 // Consider fresh for 10 seconds
   });
 
   // Initial fetch handled by the query above, no need for separate effect
@@ -88,12 +100,10 @@ export const useNotifications = () => {
         (payload) => {
           console.log('New notification received:', payload);
           playNotificationSound();
-          
-          // Update unread count
-          setUnreadCount(prev => prev + 1);
-          
-          // Invalidate queries to refresh the list
+
+          // Invalidate queries to refresh both list and count
           queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['notifications-unread', user.id] });
         }
       )
       .on(
@@ -105,13 +115,9 @@ export const useNotifications = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          // Update unread count if notification was marked as read
-          if (payload.new.read && !payload.old.read) {
-            setUnreadCount(prev => Math.max(0, prev - 1));
-          }
-          
-          // Invalidate queries
+          // Invalidate queries when notification is marked as read
           queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['notifications-unread', user.id] });
         }
       )
       .subscribe();
@@ -139,6 +145,7 @@ export const useNotifications = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread', user?.id] });
     }
   });
 
@@ -159,12 +166,13 @@ export const useNotifications = () => {
       });
     },
     onSuccess: () => {
-      setUnreadCount(0);
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread', user?.id] });
     }
   });
 
   const notifications = data?.pages.flatMap(page => page.notifications) || [];
+  const unreadCount = unreadData?.unreadCount || 0;
 
   return {
     notifications,

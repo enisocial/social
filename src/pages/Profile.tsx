@@ -11,9 +11,9 @@ import { FriendsSection } from '@/components/profile/FriendsSection';
 import { PhotosSection } from '@/components/profile/PhotosSection';
 import { VideosSection } from '@/components/profile/VideosSection';
 import { ActivitySummary } from '@/components/profile/ActivitySummary';
-import { MoreSection } from '@/components/profile/MoreSection';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Home, User, Users, Images, Video, Info, Calendar, Loader2 } from 'lucide-react';
+import { Home, User, Users, Images, Video, Info, Calendar, Loader2, HelpCircle, Shield, BookOpen, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function Profile() {
@@ -96,9 +96,10 @@ export default function Profile() {
     enabled: !!user && !!profile?.id && user.id !== profile?.id
   });
 
+  // Attendre que l'utilisateur et le profil soient chargés avant de déterminer si c'est le profil propriétaire
   const isOwnProfile = user?.id === profile?.id;
 
-  if (authLoading || profileLoading) {
+  if (authLoading || profileLoading || !user || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -173,13 +174,16 @@ export default function Profile() {
                 <Video className="h-5 w-5" />
                 <span className="hidden sm:inline">Vidéos</span>
               </TabsTrigger>
-              <TabsTrigger
-                value="more"
-                className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-400 data-[state=active]:to-purple-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
-              >
-                <User className="h-5 w-5" />
-                <span className="hidden sm:inline">Plus</span>
-              </TabsTrigger>
+              {/* ONGLET AIDE - UNIQUEMENT POUR LE PROPRIÉTAIRE */}
+              {isOwnProfile && (
+                <TabsTrigger
+                  value="help"
+                  className="gap-3 rounded-xl font-semibold transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-400 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-lg hover:bg-white/50 dark:hover:bg-gray-700/50"
+                >
+                  <HelpCircle className="h-5 w-5" />
+                  <span className="hidden sm:inline">Aide</span>
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -214,9 +218,155 @@ export default function Profile() {
                 <VideosSection userId={profile.id} />
               </TabsContent>
 
-              <TabsContent value="more" className="mt-0">
-                <MoreSection userId={profile.id} isOwnProfile={isOwnProfile} />
+              {/* ONGLET AIDE - UNIQUEMENT POUR LE PROPRIÉTAIRE */}
+              {isOwnProfile && (
+                <TabsContent value="help" className="mt-0">
+                <div className="space-y-6">
+                  {/* HEADER DE LA SECTION AIDE */}
+                  <div className="bg-gradient-to-br from-white/90 via-blue-50/80 to-indigo-50/80 dark:from-gray-800/90 dark:via-blue-950/20 dark:to-indigo-950/20 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-200/50 dark:border-blue-800/50 p-6">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <HelpCircle className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">Centre d'aide</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Trouvez des réponses et obtenez de l'aide</p>
+                      </div>
+                    </div>
+
+                    {/* GRILLE DES OPTIONS D'AIDE */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* CENTRE D'AIDE */}
+                      <button
+                        onClick={() => navigate('/help-center')}
+                        className="group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-blue-200/50 dark:border-blue-800/30 hover:shadow-lg transition-all duration-300 text-left w-full"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/5 to-blue-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative flex items-start gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center shadow-md">
+                            <HelpCircle className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Centre d'aide</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                              Trouvez des réponses à vos questions et apprenez à utiliser la plateforme.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* SIGNALER UN PROBLÈME */}
+                      <button
+                        onClick={() => navigate('/report-issue')}
+                        className="group relative overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 rounded-xl p-4 border border-amber-200/50 dark:border-amber-800/30 hover:shadow-lg transition-all duration-300 text-left w-full"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-amber-400/0 via-amber-400/5 to-amber-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative flex items-start gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center shadow-md">
+                            <Shield className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Signaler un problème</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                              Rapportez un bug ou un problème technique pour nous aider à améliorer.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* CONDITIONS D'UTILISATION */}
+                      <button
+                        onClick={() => navigate('/terms')}
+                        className="group relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 rounded-xl p-4 border border-green-200/50 dark:border-green-800/30 hover:shadow-lg transition-all duration-300 text-left w-full"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-green-400/0 via-green-400/5 to-green-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative flex items-start gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center shadow-md">
+                            <BookOpen className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Conditions d'utilisation</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                              Découvrez les règles et conditions d'utilisation de notre plateforme.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* POLITIQUE DE CONFIDENTIALITÉ */}
+                      <button
+                        onClick={() => navigate('/privacy')}
+                        className="group relative overflow-hidden bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-purple-200/50 dark:border-purple-800/30 hover:shadow-lg transition-all duration-300 text-left w-full"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-purple-400/0 via-purple-400/5 to-purple-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative flex items-start gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center shadow-md">
+                            <Lock className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Politique de confidentialité</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                              Apprenez comment nous protégeons vos données personnelles.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SECTION QUESTIONS FRÉQUENTES */}
+                  <div className="bg-gradient-to-br from-white/90 via-slate-50/80 to-gray-50/80 dark:from-gray-800/90 dark:via-slate-950/20 dark:to-gray-950/20 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200/50 dark:border-slate-800/50 p-6">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-10 h-10 bg-gradient-to-br from-slate-500 to-gray-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <HelpCircle className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Questions fréquentes</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Réponses aux questions les plus courantes</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gradient-to-r from-white/80 to-gray-50/80 dark:from-gray-700/80 dark:to-gray-600/80 rounded-xl border border-gray-200/30">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Comment modifier mon profil ?</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Cliquez sur votre photo de profil, puis sélectionnez "Modifier le profil" pour mettre à jour vos informations.
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-gradient-to-r from-white/80 to-gray-50/80 dark:from-gray-700/80 dark:to-gray-600/80 rounded-xl border border-gray-200/30">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Comment ajouter des amis ?</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Utilisez la recherche pour trouver des personnes, puis cliquez sur "Ajouter en ami" depuis leur profil.
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-gradient-to-r from-white/80 to-gray-50/80 dark:from-gray-700/80 dark:to-gray-600/80 rounded-xl border border-gray-200/30">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Comment publier du contenu ?</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Sur votre fil d'actualité, cliquez sur "Créer une publication" pour partager du texte, des photos ou des vidéos.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-800/50">
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Vous ne trouvez pas la réponse à votre question ?
+                        </p>
+                        <Button
+                          onClick={() => navigate('/help')}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                        >
+                          <HelpCircle className="w-4 h-4 mr-2" />
+                          Consulter le centre d'aide complet
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </TabsContent>
+              )}
             </div>
 
             {/* Sidebar droite (1 colonne sur 4) */}
