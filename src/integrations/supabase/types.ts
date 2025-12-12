@@ -77,6 +77,245 @@ export type Database = {
           },
         ]
       }
+      live_audio_message_likes: {
+        Row: {
+          created_at: string | null
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_audio_message_likes_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "live_audio_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_message_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_message_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      live_audio_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          is_pinned: boolean | null
+          likes_count: number | null
+          message_type: string | null
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          likes_count?: number | null
+          message_type?: string | null
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          likes_count?: number | null
+          message_type?: string | null
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_audio_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "active_live_audio_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "live_audio_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      live_audio_participants: {
+        Row: {
+          id: string
+          is_hand_raised: boolean | null
+          is_muted: boolean | null
+          joined_at: string | null
+          last_activity: string | null
+          role: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          is_hand_raised?: boolean | null
+          is_muted?: boolean | null
+          joined_at?: string | null
+          last_activity?: string | null
+          role?: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          is_hand_raised?: boolean | null
+          is_muted?: boolean | null
+          joined_at?: string | null
+          last_activity?: string | null
+          role?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_audio_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "active_live_audio_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "live_audio_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      live_audio_rooms: {
+        Row: {
+          archived_audio_url: string | null
+          audio_quality: string | null
+          created_at: string | null
+          description: string | null
+          ended_at: string | null
+          host_id: string
+          id: string
+          is_private: boolean | null
+          max_participants: number | null
+          participant_count: number | null
+          password: string | null
+          room_type: string
+          started_at: string | null
+          status: string
+          title: string
+          total_listeners: number | null
+        }
+        Insert: {
+          archived_audio_url?: string | null
+          audio_quality?: string | null
+          created_at?: string | null
+          description?: string | null
+          ended_at?: string | null
+          host_id: string
+          id?: string
+          is_private?: boolean | null
+          max_participants?: number | null
+          participant_count?: number | null
+          password?: string | null
+          room_type: string
+          started_at?: string | null
+          status?: string
+          title: string
+          total_listeners?: number | null
+        }
+        Update: {
+          archived_audio_url?: string | null
+          audio_quality?: string | null
+          created_at?: string | null
+          description?: string | null
+          ended_at?: string | null
+          host_id?: string
+          id?: string
+          is_private?: boolean | null
+          max_participants?: number | null
+          participant_count?: number | null
+          password?: string | null
+          room_type?: string
+          started_at?: string | null
+          status?: string
+          title?: string
+          total_listeners?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_audio_rooms_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_rooms_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       admin_audit_logs: {
         Row: {
           action: string
@@ -3525,6 +3764,47 @@ export type Database = {
       }
     }
     Views: {
+      active_live_audio_rooms: {
+        Row: {
+          archived_audio_url: string | null
+          audio_quality: string | null
+          avatar_url: string | null
+          created_at: string | null
+          current_participants: number | null
+          description: string | null
+          ended_at: string | null
+          host_id: string | null
+          id: string | null
+          is_private: boolean | null
+          max_participants: number | null
+          message_count: number | null
+          name: string | null
+          participant_count: number | null
+          password: string | null
+          room_type: string | null
+          started_at: string | null
+          status: string | null
+          title: string | null
+          total_listeners: number | null
+          username: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_audio_rooms_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_audio_rooms_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "user_stats_mv"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       mutual_friends_cache: {
         Row: {
           mutual_count: number | null

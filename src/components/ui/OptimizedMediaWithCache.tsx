@@ -35,20 +35,20 @@ const useIntersectionObserver = (ref: React.RefObject<Element>, options?: Inters
         setIsIntersecting(entry.isIntersecting);
       },
       {
-        threshold: 0.01, // Très faible seuil pour déclenchement instantané
-        rootMargin: '10px', // Marge minimale pour rapidité maximale
+        threshold: 0.05, // Seuil plus élevé pour déclenchement plus précoce
+        rootMargin: '50px', // Marge plus large pour anticipation
         ...options,
       }
     );
 
-    // Observer secondaire pour préchargement - ZONE ÉTENDUE
+    // Observer secondaire pour préchargement - ZONE ULTRA ÉTENDUE
     const preloadObserver = new IntersectionObserver(
       ([entry]) => {
         setIsNearViewport(entry.isIntersecting);
       },
       {
         threshold: 0,
-        rootMargin: '300px', // Zone de préchargement très large pour anticipation
+        rootMargin: '600px', // Zone de préchargement MASSIVE pour anticipation maximale
         ...options,
       }
     );
@@ -224,31 +224,44 @@ const OptimizedVideoWithCache = memo(({
   // GESTION SPÉCIALE MOBILE - Force le chargement même sans intersection
   const isMobileDevice = window.innerWidth < 768 || 'ontouchstart' in window;
 
+  // CACHE DES MÉTADONNÉES POUR ÉVITER LES RECHARGEMENTS
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     if (priority) {
-      // Pour les vidéos prioritaires, précharger immédiatement
-      video.preload = 'metadata';
+      // Pour les vidéos prioritaires, charger complètement immédiatement
+      video.preload = 'auto';
       video.load();
+      setMetadataLoaded(true);
     } else if (isVisible) {
       // Pour les vidéos visibles, charger complètement
       video.preload = 'auto';
-      video.load();
+      if (!metadataLoaded) {
+        video.load();
+        setMetadataLoaded(true);
+      }
     } else if (isNearViewport) {
       // Pour les vidéos proches de la viewport, précharger les métadonnées
       video.preload = 'metadata';
-      video.load();
+      if (!metadataLoaded) {
+        video.load();
+        setMetadataLoaded(true);
+      }
     } else if (isMobileDevice && !priority) {
       // SUR MOBILE: Précharger même les vidéos lointaines pour éviter les blocages
       video.preload = 'metadata';
-      video.load();
+      if (!metadataLoaded) {
+        video.load();
+        setMetadataLoaded(true);
+      }
     } else {
       // Pour les vidéos lointaines sur desktop, preload minimal
       video.preload = 'none';
     }
-  }, [priority, isVisible, isNearViewport, isMobileDevice]);
+  }, [priority, isVisible, isNearViewport, isMobileDevice, metadataLoaded]);
 
   const handleLoad = useCallback(() => {
     setIsLoading(false);

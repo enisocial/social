@@ -162,52 +162,51 @@ export const usePresence = (currentUserId?: string) => {
 
           const currentUserPresence = currentUserError ? null : currentUserPresenceData;
 
-          const { data: friendsPresence } = await supabase
+          // Get friend IDs first
+          const { data: friendRequests } = await supabase
             .from('friend_requests')
-            .select(`
-              sender_id,
-              receiver_id,
-              sender_presence:user_presence!friend_requests_sender_id_fkey(
-                user_id,
-                is_online,
-                last_seen
-              ),
-              receiver_presence:user_presence!friend_requests_receiver_id_fkey(
-                user_id,
-                is_online,
-                last_seen
-              )
-            `)
+            .select('sender_id, receiver_id')
             .eq('status', 'accepted')
             .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-            .limit(20); // Get more friends for better presence data
+            .limit(50);
 
-          const realPresence: PresenceState = {};
-
-          // Add current user presence
-          if (currentUserPresence) {
-            realPresence[user.id] = currentUserPresence;
-          }
-
-          // Add friends presence
-          if (friendsPresence) {
-            friendsPresence.forEach((req: any) => {
-              const friendPresence = req.sender_id === user.id ? req.receiver_presence : req.sender_presence;
-              if (friendPresence?.user_id) {
-                realPresence[friendPresence.user_id] = {
-                  user_id: friendPresence.user_id,
-                  is_online: friendPresence.is_online || false,
-                  last_seen: friendPresence.last_seen || new Date().toISOString()
-                };
-              }
+          if (friendRequests) {
+            const friendIds = new Set<string>();
+            friendRequests.forEach((req: any) => {
+              if (req.sender_id !== user.id) friendIds.add(req.sender_id);
+              if (req.receiver_id !== user.id) friendIds.add(req.receiver_id);
             });
-          }
 
-          setPresenceState(realPresence);
+            // Get presence data for friends and current user
+            const allUserIds = [user.id, ...Array.from(friendIds)];
+            const { data: presenceData } = await supabase
+              .from('user_presence')
+              .select('user_id, is_online, last_seen')
+              .in('user_id', allUserIds);
+
+            const realPresence: PresenceState = {};
+
+            // Initialize all users as offline
+            allUserIds.forEach(userId => {
+              realPresence[userId] = {
+                user_id: userId,
+                is_online: false,
+                last_seen: null
+              };
+            });
+
+            // Update with actual presence data
+            if (presenceData) {
+              presenceData.forEach((presence: any) => {
+                realPresence[presence.user_id] = presence;
+              });
+            }
+
+            setPresenceState(realPresence);
+          }
         } catch (error) {
           console.error('Error refreshing friends presence:', error);
-          // Fallback to empty state if error
-          setPresenceState({});
+          // Don't update state on error to avoid breaking existing presence data
         }
       }
     }, 15000); // Every 15 seconds for more responsive presence

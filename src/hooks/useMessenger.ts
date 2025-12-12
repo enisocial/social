@@ -566,12 +566,12 @@ export const useMessenger = (conversationId: string) => {
     if (!channelRef.current) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
+
     // Prevent "Realtime send() fallback" warning by ensuring channel is connected
     if (channelRef.current.state !== 'joined') return;
 
     try {
-      await channelRef.current.send({ type: 'broadcast', event: 'typing', payload: { userId: user.id, typing } });
+      await channelRef.current.send({ type: 'broadcast', event: 'user_typing', payload: { userId: user.id, action: typing ? 'start' : 'stop' } });
     } catch {}
   }, 1500)).current;
 

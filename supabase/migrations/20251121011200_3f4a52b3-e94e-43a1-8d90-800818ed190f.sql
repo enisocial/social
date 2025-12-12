@@ -93,11 +93,14 @@ ON public.user_presence
 FOR SELECT
 USING (auth.uid() = user_id);
 
--- Others can view presence if privacy settings allow
-CREATE POLICY "Others can view presence if allowed"
+-- Friends can view each other's presence (simplified for now)
+CREATE POLICY "Friends can view presence"
 ON public.user_presence
 FOR SELECT
-USING (check_can_view_presence(auth.uid(), user_id));
+USING (
+  check_friendship(auth.uid(), user_id)
+  OR auth.uid() = user_id
+);
 
 -- System can update presence (for SECURITY DEFINER functions)
 CREATE POLICY "System can update presence"

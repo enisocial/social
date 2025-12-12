@@ -26,8 +26,8 @@ export const TypingIndicator = ({
   useEffect(() => {
     // Subscribe to typing events via broadcast
     const channel = supabase
-      .channel(`conv:${conversationId}`)
-      .on('broadcast', { event: 'typing' }, (payload) => {
+      .channel(`conversation_${conversationId}`)
+      .on('broadcast', { event: 'user_typing' }, (payload) => {
         const data = payload.payload as any;
         
         // Only show typing indicator for the other user

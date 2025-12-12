@@ -118,12 +118,13 @@ export const useStories = () => {
         console.error('Error checking table structure:', e);
       }
 
-      // Récupérer uniquement les stories des amis et de l'utilisateur
+      // Récupérer uniquement les stories des amis et de l'utilisateur qui ne sont pas expirées
       // Utiliser une requête simple d'abord pour éviter les erreurs de colonnes
       const { data: stories, error } = await supabase
         .from('stories')
-        .select('id, user_id, media_url, media_type')
+        .select('id, user_id, media_url, media_type, expires_at')
         .in('user_id', allowedUserIds)
+        .gt('expires_at', new Date().toISOString())
         .order('id', { ascending: false });
 
       if (error) {

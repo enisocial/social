@@ -109,5 +109,7 @@ export default defineConfig(({ mode }) => ({
   define: {
     // Sécurité : Désactiver les devtools en production
     __DEV__: mode === 'development',
+    // Configuration pour simple-peer (WebRTC)
+    global: 'globalThis',
   },
 }));

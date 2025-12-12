@@ -61,6 +61,8 @@ const Events = lazy(() => import("./pages/Events"));
 const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
 const VideoTest = lazy(() => import("./pages/VideoTest"));
 const Messages = lazy(() => import("./pages/Messages"));
+const VoicePosts = lazy(() => import("./pages/VoicePosts"));
+const PresenceChecker = lazy(() => import("./components/PresenceChecker").then(module => ({ default: module.PresenceChecker })));
 
 // OPTIMIZED QueryClient - Balanced speed + resilience
 const queryClient = new QueryClient({
@@ -194,6 +196,8 @@ function AnimatedRoutes() {
           <Route path="/video-test" element={<PageTransition><UserProtectedRoute><VideoTest /></UserProtectedRoute></PageTransition>} />
           <Route path="/install" element={<PageTransition><Install /></PageTransition>} />
           <Route path="/geolocation-test" element={<PageTransition><UserProtectedRoute><GeolocationTest /></UserProtectedRoute></PageTransition>} />
+          <Route path="/voice-posts" element={<PageTransition><UserProtectedRoute><VoicePosts /></UserProtectedRoute></PageTransition>} />
+          <Route path="/presence-debug" element={<PageTransition><UserProtectedRoute><PresenceChecker /></UserProtectedRoute></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
       </Suspense>

@@ -1,6 +1,7 @@
-import React from 'react';
-import { X, Image as ImageIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Image as ImageIcon, Upload, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 
 interface MediaUploaderProps {
@@ -12,6 +13,9 @@ interface MediaUploaderProps {
 }
 
 export const MediaUploader = ({ files, setFiles, previews, setPreviews, inputRef }: MediaUploaderProps) => {
+  const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({});
+  const [uploadStatus, setUploadStatus] = useState<Record<number, 'idle' | 'uploading' | 'completed' | 'error'>>({});
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newFiles = Array.from(e.target.files || []);
     if (newFiles.length === 0) return;
@@ -41,8 +45,41 @@ export const MediaUploader = ({ files, setFiles, previews, setPreviews, inputRef
 
     // create previews and append files
     const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+    const startIndex = files.length;
+
     setFiles([...files, ...newFiles]);
     setPreviews([...previews, ...newPreviews]);
+
+    // Initialize upload status for new files
+    const newUploadStatus: Record<number, 'idle' | 'uploading' | 'completed' | 'error'> = {};
+    const newUploadProgress: Record<number, number> = {};
+
+    newFiles.forEach((_, idx) => {
+      const fileIndex = startIndex + idx;
+      newUploadStatus[fileIndex] = 'idle';
+      newUploadProgress[fileIndex] = 0;
+    });
+
+    setUploadStatus(prev => ({ ...prev, ...newUploadStatus }));
+    setUploadProgress(prev => ({ ...prev, ...newUploadProgress }));
+
+    // Simulate upload progress for visual feedback
+    newFiles.forEach((file, idx) => {
+      const fileIndex = startIndex + idx;
+      setUploadStatus(prev => ({ ...prev, [fileIndex]: 'uploading' }));
+
+      // Simulate progressive upload
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress >= 100) {
+          progress = 100;
+          setUploadStatus(prev => ({ ...prev, [fileIndex]: 'completed' }));
+          clearInterval(interval);
+        }
+        setUploadProgress(prev => ({ ...prev, [fileIndex]: Math.round(progress) }));
+      }, 200 + Math.random() * 300);
+    });
 
     // reset input so same file can be selected again
     if (e.target) e.target.value = '';
@@ -55,6 +92,18 @@ export const MediaUploader = ({ files, setFiles, previews, setPreviews, inputRef
     }
     setFiles(files.filter((_, i) => i !== index));
     setPreviews(previews.filter((_, i) => i !== index));
+
+    // Clean up upload states
+    setUploadProgress(prev => {
+      const newProgress = { ...prev };
+      delete newProgress[index];
+      return newProgress;
+    });
+    setUploadStatus(prev => {
+      const newStatus = { ...prev };
+      delete newStatus[index];
+      return newStatus;
+    });
   };
 
   // cleanup all previews on unmount
@@ -79,46 +128,67 @@ export const MediaUploader = ({ files, setFiles, previews, setPreviews, inputRef
       />
 
       {previews.length > 0 && (
-        <div className={`grid gap-2 ${
-          previews.length === 1 ? 'grid-cols-1' :
-          previews.length === 2 ? 'grid-cols-2' :
-          previews.length === 3 ? 'grid-cols-3' :
-          'grid-cols-2'
-        }`}>
+        <div className="grid grid-cols-3 gap-2">
           {previews.map((preview, index) => (
-            <div key={index} className="relative rounded-lg overflow-hidden bg-muted group">
-              {files[index].type.startsWith('video') ? (
-                // video preview: use object-contain to avoid cropping; show controls/playsInline
-                <video
-                  src={preview}
-                  className="w-full h-full object-contain bg-black"
-                  controls
-                  playsInline
-                  preload="metadata"
-                />
-              ) : (
-                // image preview: object-contain to avoid cutting important parts
-                <img src={preview} alt={files[index].name ?? ''} className="w-full h-full object-contain" />
+            <div key={index} className="relative group">
+              {/* Facebook-style small preview */}
+              <div className="aspect-square rounded-lg overflow-hidden bg-muted border">
+                {files[index].type.startsWith('video') ? (
+                  <video
+                    src={preview}
+                    className="w-full h-full object-cover bg-black"
+                    preload="metadata"
+                    muted
+                  />
+                ) : (
+                  <img
+                    src={preview}
+                    alt={files[index].name ?? ''}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+
+              {/* Upload progress overlay */}
+              {uploadStatus[index] === 'uploading' && (
+                <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                  <div className="w-full px-2">
+                    <Progress value={uploadProgress[index] || 0} className="h-1 mb-1" />
+                    <div className="flex items-center justify-center gap-1 text-white text-xs">
+                      <Upload className="h-3 w-3" />
+                      <span>{uploadProgress[index] || 0}%</span>
+                    </div>
+                  </div>
+                </div>
               )}
+
+              {/* Success indicator */}
+              {uploadStatus[index] === 'completed' && (
+                <div className="absolute top-1 right-1 bg-green-500 rounded-full p-1">
+                  <CheckCircle className="h-3 w-3 text-white" />
+                </div>
+              )}
+
+              {/* Remove button */}
               <Button
                 type="button"
                 variant="destructive"
                 size="icon"
-                className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                 onClick={() => removeFile(index)}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </Button>
             </div>
           ))}
-          
+
           {previews.length < 10 && (
             <button
               type="button"
               className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 flex items-center justify-center transition-colors"
               onClick={() => document.getElementById('media-input')?.click()}
             >
-              <ImageIcon className="h-8 w-8 text-muted-foreground" />
+              <ImageIcon className="h-6 w-6 text-muted-foreground" />
             </button>
           )}
         </div>

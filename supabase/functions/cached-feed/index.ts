@@ -1,3 +1,4 @@
+// @deno-types="https://esm.sh/@supabase/supabase-js@2.81.1/dist/module/index.d.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.81.1';
 import { corsHeaders } from '../_shared/cors.ts';
 import { redis } from '../_shared/redis.ts';
@@ -99,9 +100,9 @@ Deno.serve(async (req: Request) => {
         .eq('status', 'accepted')
         .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
 
-      const friendIds = friendships?.map(fr =>
+      const friendIds = friendships?.map((fr: { sender_id: string; receiver_id: string }) =>
         fr.sender_id === user.id ? fr.receiver_id : fr.sender_id
-      ).filter(id => id !== user.id) || [];
+      ).filter((id: string) => id !== user.id) || [];
 
       if (friendIds.length > 0) {
         postsQuery = postsQuery.in('user_id', friendIds);
@@ -128,7 +129,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Get likes and comments counts efficiently
-    const postIds = rawPosts.map(p => p.id);
+    const postIds = rawPosts.map((p: { id: string }) => p.id);
 
     const [likesData, commentsData, userLikesData] = await Promise.all([
       supabase.from('likes').select('post_id', { count: 'exact' }).in('post_id', postIds),
@@ -141,18 +142,18 @@ Deno.serve(async (req: Request) => {
     const commentsCount: Record<string, number> = {};
     const userLikedSet = new Set<string>();
 
-    likesData.data?.forEach(like => {
+    likesData.data?.forEach((like: { post_id: string }) => {
       likesCount[like.post_id] = (likesCount[like.post_id] || 0) + 1;
     });
 
-    commentsData.data?.forEach(comment => {
+    commentsData.data?.forEach((comment: { post_id: string }) => {
       commentsCount[comment.post_id] = (commentsCount[comment.post_id] || 0) + 1;
     });
 
-    userLikesData.data?.forEach(like => userLikedSet.add(like.post_id));
+    userLikesData.data?.forEach((like: { post_id: string }) => userLikedSet.add(like.post_id));
 
     // Transform posts
-    const posts = rawPosts.map(post => ({
+    const posts = rawPosts.map((post: any) => ({
       id: post.id,
       content: post.content || '',
       media_url: post.media_url,

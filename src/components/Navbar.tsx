@@ -16,7 +16,9 @@ import {
   Activity,
   Heart,
   Globe,
-  Zap
+  Zap,
+  Mic,
+  Radio
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -248,6 +250,30 @@ export const Navbar = () => {
               </div>
             </Link>
           </motion.div>
+
+          {/* POSTS VOCAUX */}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/voice-posts" className="relative group">
+              <div className={`
+                relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300
+                ${isActivePath('/voice-posts')
+                  ? 'bg-gradient-to-br from-rose-500 to-pink-500 shadow-lg shadow-rose-500/25'
+                  : 'hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-lg hover:shadow-gray-500/10'
+                }
+              `}>
+                <Mic className={`w-6 h-6 transition-all duration-300 ${
+                  isActivePath('/voice-posts')
+                    ? 'text-white scale-110'
+                    : 'text-gray-600 dark:text-gray-300 group-hover:text-rose-600 group-hover:scale-105'
+                }`} />
+
+                {/* EFFET DE FOND ANIMÉ */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-rose-400/0 via-rose-400/20 to-rose-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+            </Link>
+          </motion.div>
+
+
 
           {/* NOTIFICATIONS */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -486,6 +512,15 @@ export const Navbar = () => {
                         {unreadMessagesCount}
                       </Badge>
                     )}
+                  </Link>
+
+                  <Link
+                    to="/voice-posts"
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors text-foreground"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Mic className="h-5 w-5" />
+                    <span className="font-medium">Posts vocaux</span>
                   </Link>
 
                   <Link
