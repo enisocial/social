@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Mic,
   MicOff,
@@ -14,9 +15,12 @@ import {
   RotateCcw,
   Upload,
   X,
-  Volume2
+  Volume2,
+  Settings,
+  CheckCircle
 } from 'lucide-react';
 import { useVoicePosts } from '@/hooks/useVoicePosts';
+import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { toast } from 'sonner';
 
 interface CreateVoicePostProps {
@@ -35,6 +39,17 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
     uploadProgress
   } = useVoicePosts();
 
+  // Audio device management
+  const {
+    devices,
+    loading: devicesLoading,
+    error: devicesError,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    getAudioStream,
+    getBestMicrophone
+  } = useAudioDevices();
+
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -42,6 +57,7 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [currentDeviceInfo, setCurrentDeviceInfo] = useState<string>('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -50,65 +66,190 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
 
   const MAX_DURATION = 60; // 60 seconds max
 
-  // Start recording
+  // Start recording with automatic microphone selection
   const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 44100,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
+    console.log('🎤 START RECORDING - DÉBUT DE FONCTION');
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus' // Optimized for compression
-      });
+    // WRAPPER GLOBAL POUR CAPTURER TOUTES LES ERREURS
+    try {
+      console.log('🎤 DÉBUT ENREGISTREMENT AVEC MICRO SÉLECTIONNÉ');
+      setIsRecording(true); // Set recording state immediately to avoid UI freeze
+      console.log('✅ État isRecording défini à true');
+
+      // Debug: Afficher le micro sélectionné
+      const bestDevice = getBestMicrophone();
+      console.log('🎯 Meilleur micro détecté:', bestDevice);
+
+      // Utiliser le micro sélectionné automatiquement
+      console.log('📡 Obtention du stream audio...');
+      const stream = await getAudioStream();
+      console.log('✅ Stream audio obtenu');
+
+      // Vérifier que le stream est valide
+      if (!stream || stream.getAudioTracks().length === 0) {
+        throw new Error('Aucun stream audio valide obtenu');
+      }
+      console.log('✅ Stream validé');
+
+      // Obtenir les informations du périphérique actuel
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const track = audioTracks[0];
+        const settings = track.getSettings();
+
+        console.log('🎤 TRACK INFO:', {
+          label: track.label,
+          deviceId: settings.deviceId,
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+          readyState: track.readyState
+        });
+
+        setCurrentDeviceInfo(track.label || 'Microphone inconnu');
+
+        // Vérifier si c'est vraiment le bon micro
+        const isUsingBestDevice = bestDevice && settings.deviceId === bestDevice.deviceId;
+        console.log('🔍 Utilise le meilleur micro ?', isUsingBestDevice);
+
+        // Afficher une notification du micro utilisé
+        if (bestDevice?.isExternal && isUsingBestDevice) {
+          toast.success(`🎤 Micro externe utilisé: ${bestDevice.label}`, {
+            duration: 4000,
+          });
+          console.log('✅ MICRO EXTERNE RÉELLEMENT UTILISÉ !');
+        } else if (bestDevice?.isExternal && !isUsingBestDevice) {
+          toast.warning(`⚠️ Micro externe détecté mais pas utilisé: ${track.label}`, {
+            duration: 4000,
+          });
+          console.log('❌ MICRO EXTERNE DÉTECTÉ MAIS PAS UTILISÉ !');
+        } else {
+          toast.info(`🎤 Micro utilisé: ${track.label || 'Par défaut'}`, {
+            duration: 3000,
+          });
+          console.log('📱 MICRO UTILISÉ');
+        }
+      }
+
+      // Créer le MediaRecorder avec gestion d'erreur
+      let mediaRecorder: MediaRecorder;
+      console.log('🎬 Création MediaRecorder...');
+      try {
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus' // Optimized for compression
+        });
+        console.log('✅ MediaRecorder créé avec opus');
+      } catch (recorderError) {
+        console.warn('⚠️ Codec opus non supporté, tentative avec fallback');
+        // Fallback pour navigateurs qui ne supportent pas opus
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm'
+        });
+        console.log('✅ MediaRecorder créé avec fallback webm');
+      }
 
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      console.log('✅ MediaRecorder configuré');
 
       mediaRecorder.ondataavailable = (event) => {
+        console.log('📦 Données audio reçues:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: 'audio/webm;codecs=opus'
-        });
-        const url = URL.createObjectURL(audioBlob);
+        console.log('🛑 ENREGISTREMENT ARRÊTÉ - Traitement final');
+        try {
+          console.log('📦 Création du blob audio...');
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: mediaRecorder.mimeType || 'audio/webm'
+          });
+          const url = URL.createObjectURL(audioBlob);
 
-        setAudioBlob(audioBlob);
-        setAudioUrl(url);
+          console.log('🎵 Blob créé, mise à jour état...');
+          setAudioBlob(audioBlob);
+          setAudioUrl(url);
+          setIsRecording(false);
+          setRecordingTime(0);
 
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+          console.log('✅ Audio finalisé:', {
+            size: audioBlob.size,
+            type: audioBlob.type,
+            chunks: audioChunksRef.current.length
+          });
+
+          // Stop all tracks
+          console.log('🔇 Arrêt des tracks audio...');
+          stream.getTracks().forEach(track => track.stop());
+          setCurrentDeviceInfo('');
+
+          toast.success('Enregistrement terminé !', { duration: 2000 });
+
+        } catch (stopError) {
+          console.error('❌ ERREUR CRITIQUE lors de l\'arrêt:', stopError);
+          setIsRecording(false);
+          toast.error('Erreur lors de la finalisation de l\'enregistrement');
+        }
       };
 
+      mediaRecorder.onerror = (event) => {
+        console.error('❌ ERREUR MediaRecorder:', event);
+        setIsRecording(false);
+        toast.error('Erreur d\'enregistrement audio');
+      };
+
+      // Démarrer l'enregistrement
+      console.log('🎬 DÉMARRAGE ENREGISTREMENT...');
       mediaRecorder.start(1000); // Collect data every second
-      setIsRecording(true);
       setRecordingTime(0);
+      console.log('✅ MediaRecorder.start() appelé');
 
       // Start timer
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => {
           if (prev >= MAX_DURATION) {
+            console.log('⏰ DURÉE MAX ATTEINTE - Arrêt automatique');
             stopRecording();
             return prev;
           }
           return prev + 1;
         });
       }, 1000);
+      console.log('✅ Timer démarré');
+
+      console.log('✅ ENREGISTREMENT DÉMARRÉ AVEC SUCCÈS - TOUT FONCTIONNE !');
 
     } catch (error) {
-      console.error('Error starting recording:', error);
-      toast.error('Erreur lors du démarrage de l\'enregistrement');
+      console.error('❌ ERREUR CRITIQUE GLOBALE:', error);
+      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack');
+
+      // Reset ALL states on error
+      setIsRecording(false);
+      setRecordingTime(0);
+      setCurrentDeviceInfo('');
+
+      // Cleanup any existing recorder
+      if (mediaRecorderRef.current) {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (e) {
+          console.log('⚠️ Cleanup error (normal):', e);
+        }
+      }
+
+      // Clear timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+
+      // Show error to user
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue lors de l\'enregistrement';
+      toast.error(`Erreur d'enregistrement: ${errorMessage}`, { duration: 5000 });
+      console.log('❌ Toast d\'erreur affiché à l\'utilisateur');
     }
-  }, []);
+  }, [getAudioStream, getBestMicrophone]);
 
   // Stop recording
   const stopRecording = useCallback(() => {
@@ -222,8 +363,42 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
   }, [audioUrl]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md mx-auto">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+      style={{
+        zIndex: 9999,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        // Utiliser des unités safe pour mobile (éviter les barres d'adresse)
+        height: '100svh',
+        minHeight: '100vh',
+        // Forcer l'affichage sur mobile
+        WebkitTransform: 'translateZ(0)', // Force hardware acceleration
+        transform: 'translateZ(0)',
+        willChange: 'transform',
+        // Éviter les problèmes de scroll sur iOS
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'none'
+      }}
+    >
+      <Card
+        className="w-full max-w-md mx-auto relative shadow-2xl"
+        style={{
+          zIndex: 10000,
+          // Utiliser des unités safe pour mobile avec fallbacks
+          maxHeight: 'min(90dvh, 90svh, 90vh)',
+          // Forcer l'affichage au-dessus de tout
+          position: 'relative',
+          WebkitTransform: 'translateZ(0)',
+          transform: 'translateZ(0)',
+          // Style pour mobile
+          borderRadius: '12px',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}
+      >
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Créer un post vocal</CardTitle>
@@ -350,6 +525,88 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
                 </span>
                 <span>Taille: {(audioBlob.size / 1024 / 1024).toFixed(1)} MB</span>
               </div>
+            </div>
+          )}
+
+          {/* Microphone Selection */}
+          {!audioBlob && (
+            <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Settings className="w-4 h-4 text-blue-600" />
+                  <Label className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Microphone
+                  </Label>
+                </div>
+                {devicesLoading && (
+                  <div className="text-xs text-muted-foreground">Chargement...</div>
+                )}
+              </div>
+
+              {/* Current Device Info */}
+              {currentDeviceInfo && (
+                <div className="flex items-center space-x-2 text-sm">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="text-green-700 dark:text-green-300">
+                    {currentDeviceInfo}
+                  </span>
+                </div>
+              )}
+
+              {/* Device Selection */}
+              {devices.length > 1 && (
+                <div className="space-y-2">
+                  <Select
+                    value={selectedDeviceId || ''}
+                    onValueChange={setSelectedDeviceId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Sélectionner un microphone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {devices.map((device) => (
+                        <SelectItem key={device.deviceId} value={device.deviceId}>
+                          <div className="flex items-center space-x-2">
+                            <span>{device.label}</span>
+                            {device.isExternal && (
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                                Externe
+                              </span>
+                            )}
+                            {device.priority > 50 && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                Recommandé
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Best Device Info */}
+              {devices.length > 0 && !devicesLoading && (
+                <div className="text-xs text-muted-foreground">
+                  {(() => {
+                    const bestDevice = getBestMicrophone();
+                    if (bestDevice?.isExternal) {
+                      return `🎤 Micro externe détecté automatiquement: ${bestDevice.label}`;
+                    } else if (bestDevice) {
+                      return `🎤 Micro sélectionné: ${bestDevice.label}`;
+                    }
+                    return '🎤 Aucun microphone trouvé';
+                  })()}
+                </div>
+              )}
+
+              {/* Error Display */}
+              {devicesError && (
+                <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                  ⚠️ Erreur micros: {devicesError}
+                </div>
+              )}
             </div>
           )}
 

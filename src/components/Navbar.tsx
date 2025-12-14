@@ -391,6 +391,21 @@ export const Navbar = () => {
                     </Link>
                   </DropdownMenuItem>
 
+                  {/* TEMPORAIRE - OUTIL DE DIAGNOSTIC BADGE VERT */}
+                  {(() => {
+                    console.log('🔧 RENDERING DIAGNOSTIC BUTTON');
+                    return (
+                      <DropdownMenuItem asChild className="rounded-xl hover:bg-orange-50 dark:hover:bg-orange-950/50 cursor-pointer">
+                        <Link to="/presence-debug" className="flex items-center gap-3 w-full">
+                          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                          </div>
+                          <span className="font-medium">🔧 Diagnostic Présence</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })()}
+
                   {isAdmin && (
                     <DropdownMenuItem asChild className="rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/50 cursor-pointer">
                       <Link to="/admin" className="flex items-center gap-3 w-full">

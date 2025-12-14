@@ -50,10 +50,13 @@ SECURITY DEFINER
 SET search_path = 'public'
 AS $$
 BEGIN
+  -- First, clean up any stale presence records to ensure accuracy
+  PERFORM cleanup_stale_presence();
+
   RETURN QUERY
   WITH user_friends AS (
     SELECT DISTINCT
-      CASE 
+      CASE
         WHEN fr.sender_id = user_id_param THEN fr.receiver_id
         ELSE fr.sender_id
       END as friend_id
@@ -62,22 +65,22 @@ BEGIN
       AND fr.status = 'accepted'
   ),
   friend_conversations AS (
-    SELECT 
+    SELECT
       cp1.user_id as friend_id,
       cp1.conversation_id,
       cp1.unread_count
     FROM conversation_participants cp1
-    INNER JOIN conversation_participants cp2 
+    INNER JOIN conversation_participants cp2
       ON cp1.conversation_id = cp2.conversation_id
     WHERE cp2.user_id = user_id_param
       AND cp1.user_id != user_id_param
   )
-  SELECT 
+  SELECT
     p.id,
     p.name,
     p.username,
     p.avatar_url,
-    COALESCE(up.online, false) as online,
+    COALESCE(up.is_online, false) as online,  -- Use is_online column explicitly
     up.last_seen,
     COALESCE(fc.unread_count, 0)::INTEGER as unread_count,
     fc.conversation_id
@@ -87,8 +90,8 @@ BEGIN
   LEFT JOIN friend_conversations fc ON fc.friend_id = p.id
   LEFT JOIN user_roles ur ON ur.user_id = p.id
   WHERE ur.role IS NULL OR ur.role NOT IN ('admin', 'moderator')
-  ORDER BY 
-    COALESCE(up.online, false) DESC,
+  ORDER BY
+    COALESCE(up.is_online, false) DESC,
     up.last_seen DESC NULLS LAST;
 END;
 $$;

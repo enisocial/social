@@ -170,21 +170,32 @@ export const useAuth = () => {
   const signOut = async () => {
     console.log('🚪 SIGNOUT STARTED - User:', user?.email);
 
-    // Set user offline before signing out
+    // Set user offline before signing out - use direct database call to ensure it works
     if (user?.id) {
       console.log('📴 Setting user offline before logout...');
       try {
-        // Use RPC function which has SECURITY DEFINER and will work even during logout
-        await supabase.rpc('update_user_presence', {
-          p_user_id: user.id,
-          p_online: false
-        });
+        // Use direct database update before session is invalidated
+        const { error: presenceError } = await supabase
+          .from('user_presence')
+          .upsert({
+            user_id: user.id,
+            is_online: false,
+            last_seen: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id'
+          });
 
-        console.log('✅ User set to offline');
-        // Wait a bit to ensure the update propagates
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (presenceError) {
+          console.error('❌ Error setting offline status:', presenceError);
+        } else {
+          console.log('✅ User set to offline successfully');
+        }
+
+        // Small delay to ensure the update is processed
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
-        console.error('❌ Error setting offline status:', error);
+        console.error('❌ Exception setting offline status:', error);
       }
     }
 

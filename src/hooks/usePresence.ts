@@ -18,34 +18,31 @@ export const usePresence = (currentUserId?: string) => {
   const [presenceState, setPresenceState] = useState<PresenceState>({});
   const [isOnline, setIsOnline] = useState(true);
 
-  // Update user presence
+  // Update user presence using direct database call (bypasses RLS issues)
   const updatePresence = useCallback(async (online: boolean, page?: string) => {
     if (!user?.id) return;
 
     try {
       console.log('🔄 Updating presence:', { user_id: user.id, online });
-      const { data, error } = await supabase
+
+      // Use direct upsert which should work with the SECURITY DEFINER policy
+      const { error } = await supabase
         .from('user_presence')
         .upsert({
           user_id: user.id,
           is_online: online,
-          last_seen: new Date().toISOString()
+          last_seen: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id'
         });
 
       if (error) {
         console.error('❌ Error updating presence:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
         throw error;
       }
 
-      console.log('✅ Presence updated successfully:', data);
+      console.log('✅ Presence updated successfully');
       setIsOnline(online);
     } catch (error) {
       console.error('💥 Exception updating presence:', error);
@@ -56,9 +53,38 @@ export const usePresence = (currentUserId?: string) => {
   useEffect(() => {
     if (!user?.id) return;
 
+    // FORCE CLEANUP: Clean up stale presence records on component mount
+    const forceCleanup = async () => {
+      try {
+        console.log('🧹 Force cleanup of stale presence records...');
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+        // Clean up all stale records (including potential stuck users like "toti koue yvan")
+        const { error: cleanupError } = await supabase
+          .from('user_presence')
+          .update({
+            is_online: false,
+            last_seen: new Date().toISOString()
+          })
+          .lt('updated_at', fiveMinutesAgo)
+          .eq('is_online', true);
+
+        if (cleanupError) {
+          console.error('❌ Cleanup error:', cleanupError);
+        } else {
+          console.log('✅ Stale presence records cleaned up');
+        }
+      } catch (error) {
+        console.error('💥 Exception during cleanup:', error);
+      }
+    };
+
     // Get initial presence state for friends and current user
     const fetchFriendsPresence = async () => {
       try {
+        // First, force cleanup
+        await forceCleanup();
+
         // Get user's friends first
         const { data: friends } = await supabase
           .from('friend_requests')
@@ -146,70 +172,12 @@ export const usePresence = (currentUserId?: string) => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // Heartbeat to keep user online and refresh friends presence
+    // Simplified heartbeat - just keep user online, cleanup is handled by database triggers
     const heartbeat = setInterval(async () => {
       if (!document.hidden) {
-        await updatePresence(true, window.location.pathname);
-
-        // Refresh friends presence data from database
-        try {
-          // Get current user's presence
-          const { data: currentUserPresenceData, error: currentUserError } = await supabase
-            .from('user_presence')
-            .select('user_id, is_online, last_seen')
-            .eq('user_id', user.id)
-            .single();
-
-          const currentUserPresence = currentUserError ? null : currentUserPresenceData;
-
-          // Get friend IDs first
-          const { data: friendRequests } = await supabase
-            .from('friend_requests')
-            .select('sender_id, receiver_id')
-            .eq('status', 'accepted')
-            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-            .limit(50);
-
-          if (friendRequests) {
-            const friendIds = new Set<string>();
-            friendRequests.forEach((req: any) => {
-              if (req.sender_id !== user.id) friendIds.add(req.sender_id);
-              if (req.receiver_id !== user.id) friendIds.add(req.receiver_id);
-            });
-
-            // Get presence data for friends and current user
-            const allUserIds = [user.id, ...Array.from(friendIds)];
-            const { data: presenceData } = await supabase
-              .from('user_presence')
-              .select('user_id, is_online, last_seen')
-              .in('user_id', allUserIds);
-
-            const realPresence: PresenceState = {};
-
-            // Initialize all users as offline
-            allUserIds.forEach(userId => {
-              realPresence[userId] = {
-                user_id: userId,
-                is_online: false,
-                last_seen: null
-              };
-            });
-
-            // Update with actual presence data
-            if (presenceData) {
-              presenceData.forEach((presence: any) => {
-                realPresence[presence.user_id] = presence;
-              });
-            }
-
-            setPresenceState(realPresence);
-          }
-        } catch (error) {
-          console.error('Error refreshing friends presence:', error);
-          // Don't update state on error to avoid breaking existing presence data
-        }
+        await updatePresence(true);
       }
-    }, 15000); // Every 15 seconds for more responsive presence
+    }, 30000); // Every 30 seconds - less frequent, more reliable
 
     return () => {
       channel.unsubscribe();
