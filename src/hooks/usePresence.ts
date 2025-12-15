@@ -5,7 +5,7 @@ import { useAuth } from './useAuth';
 interface UserPresence {
   user_id: string;
   is_online: boolean;
-  last_seen: string;
+  last_seen: string | null;
   current_page?: string;
 }
 
@@ -13,19 +13,16 @@ interface PresenceState {
   [userId: string]: UserPresence;
 }
 
-export const usePresence = (currentUserId?: string) => {
+export const usePresence = () => {
   const { user } = useAuth();
   const [presenceState, setPresenceState] = useState<PresenceState>({});
   const [isOnline, setIsOnline] = useState(true);
 
-  // Update user presence using direct database call (bypasses RLS issues)
-  const updatePresence = useCallback(async (online: boolean, page?: string) => {
-    if (!user?.id) return;
+  // Simple presence update function - no useCallback to avoid circular dependencies
+  const updatePresence = async (online: boolean) => {
+    if (!user?.id) return false;
 
     try {
-      console.log('🔄 Updating presence:', { user_id: user.id, online });
-
-      // Use direct upsert which should work with the SECURITY DEFINER policy
       const { error } = await supabase
         .from('user_presence')
         .upsert({
@@ -37,17 +34,16 @@ export const usePresence = (currentUserId?: string) => {
           onConflict: 'user_id'
         });
 
-      if (error) {
-        console.error('❌ Error updating presence:', error);
-        throw error;
+      if (!error) {
+        setIsOnline(online);
+        return true;
       }
-
-      console.log('✅ Presence updated successfully');
-      setIsOnline(online);
+      return false;
     } catch (error) {
-      console.error('💥 Exception updating presence:', error);
+      console.error('Presence update failed:', error);
+      return false;
     }
-  }, [user?.id]);
+  };
 
   // Subscribe to presence changes for friends
   useEffect(() => {
@@ -187,7 +183,7 @@ export const usePresence = (currentUserId?: string) => {
       // Set offline when component unmounts
       updatePresence(false);
     };
-  }, [user?.id, updatePresence]);
+  }, [user?.id]);
 
   // Get presence info for a specific user
   const getUserPresence = useCallback((userId: string): UserPresence | null => {

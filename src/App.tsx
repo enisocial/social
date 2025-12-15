@@ -113,11 +113,11 @@ const LoadingFallback = () => (
   </div>
 );
 
-// PRESENCE INITIALIZER - Démarre le système de présence pour tous les utilisateurs authentifiés
+// PRESENCE INITIALIZER - Système de présence en temps réel
 const PresenceInitializer = () => {
-  console.log('🔍 Initializing presence system...');
-  usePresence(); // This initializes presence tracking for the current user
-  return null; // This component doesn't render anything
+  // Initialise le système de présence pour tous les utilisateurs authentifiés
+  usePresence(); // Démarre le tracking de présence automatiquement
+  return null; // Ce composant ne rend rien visuellement
 };
 
 function AnimatedRoutes() {
