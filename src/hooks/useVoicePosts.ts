@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 export interface VoicePost {
   id: string;
@@ -36,6 +37,7 @@ export interface VoicePostComment {
 }
 
 export const useVoicePosts = () => {
+  const queryClient = useQueryClient();
   const [voicePosts, setVoicePosts] = useState<VoicePost[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -536,6 +538,25 @@ export const useVoicePosts = () => {
 
       // Update local state
       setVoicePosts(prev => prev.filter(post => post.id !== voicePostId));
+
+      // Force immediate refresh of unified feed
+      try {
+        // Invalidate cache
+        queryClient.invalidateQueries({ queryKey: ['unified-feed'] });
+
+        // Also trigger immediate refetch
+        queryClient.refetchQueries({ queryKey: ['unified-feed'] });
+
+        // Dispatch event for additional refresh
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('voice-post-deleted', {
+            detail: { deletedPostId: voicePostId }
+          }));
+        }
+
+      } catch (cacheError) {
+        console.warn('Could not refresh unified feed cache:', cacheError);
+      }
 
       toast.success('Post vocal supprimé');
 

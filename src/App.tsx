@@ -17,6 +17,7 @@ import { usePresence } from "@/hooks/usePresence";
 
 
 import { RoutePreloader } from "@/components/RoutePreloader";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Lazy load pages for better performance
 const Splash = lazy(() => import("./pages/Splash"));
@@ -150,7 +151,7 @@ function AnimatedRoutes() {
       <Suspense fallback={<LoadingFallback />}>
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<PageTransition><Splash /></PageTransition>} />
-          <Route path="/feed" element={<PageTransition><UserProtectedRoute><Feed /></UserProtectedRoute></PageTransition>} />
+          <Route path="/feed" element={<PageTransition><UserProtectedRoute><ErrorBoundary><Feed /></ErrorBoundary></UserProtectedRoute></PageTransition>} />
           <Route path="/explore" element={<PageTransition><UserProtectedRoute><Explore /></UserProtectedRoute></PageTransition>} />
           <Route path="/auth" element={<PageTransition><Auth /></PageTransition>} />
           <Route path="/help" element={<PageTransition><Help /></PageTransition>} />
@@ -202,23 +203,25 @@ function AnimatedRoutes() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <TooltipProvider>
-        <BrowserRouter>
-          <UnreadProvider>
-            <MessengerProvider>
-              <PresenceInitializer />
-              <Toaster />
-              <Sonner />
-              <RoutePreloader />
-              <AnimatedRoutes />
-            </MessengerProvider>
-          </UnreadProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <TooltipProvider>
+          <BrowserRouter>
+            <UnreadProvider>
+              <MessengerProvider>
+                <PresenceInitializer />
+                <Toaster />
+                <Sonner />
+                <RoutePreloader />
+                <AnimatedRoutes />
+              </MessengerProvider>
+            </UnreadProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

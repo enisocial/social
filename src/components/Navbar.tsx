@@ -77,12 +77,12 @@ export const Navbar = () => {
     queryFn: async () => {
       if (!user) return false;
 
-      // TEMP FIX: Check admin by email instead of user_roles table (RLS issues)
+      // Vérification du statut administrateur
       if (user.email === 'admin@binkaa.com') {
         return true;
       }
 
-      // Check for admin role in database (fallback)
+      // Vérification du rôle administrateur en base de données
       try {
         const { data } = await supabase
           .from('user_roles')
@@ -92,7 +92,7 @@ export const Navbar = () => {
           .single();
         return !!data;
       } catch (error) {
-        console.warn('Could not check user_roles table:', error);
+        console.warn('Impossible de vérifier le rôle utilisateur:', error);
         return false;
       }
     },
@@ -100,19 +100,12 @@ export const Navbar = () => {
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
-  // Use unread messages hook (simplified version)
+  // Utilisation du hook pour les messages non lus
   const { totalUnread: unreadMessagesCount = 0 } = useUnreadMessages();
 
-  const getConversationUnreadCount = () => 0; // Placeholder
-  const unreadCount = 0; // TODO: Implémenter notifications
-  const pendingFriendRequests = 0; // TODO: Implémenter demandes d'amis
-
-  // DEBUG: Log badge values
-  console.log('🎯 Navbar Badges:', {
-    messages: unreadMessagesCount,
-    notifications: unreadCount,
-    friends: pendingFriendRequests
-  });
+  // Valeurs temporaires pour les notifications (à implémenter)
+  const unreadCount = 0;
+  const pendingFriendRequests = 0;
 
   if (!user) return null;
 
@@ -378,7 +371,7 @@ export const Navbar = () => {
                       <div className="w-8 h-8 bg-cyan-100 dark:bg-cyan-900 rounded-lg flex items-center justify-center">
                         <Activity className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
                       </div>
-                      <span className="font-medium">Tableau de bord</span>
+                      <span className="font-medium">Statistiques</span>
                     </Link>
                   </DropdownMenuItem>
 
@@ -391,20 +384,7 @@ export const Navbar = () => {
                     </Link>
                   </DropdownMenuItem>
 
-                  {/* TEMPORAIRE - OUTIL DE DIAGNOSTIC BADGE VERT */}
-                  {(() => {
-                    console.log('🔧 RENDERING DIAGNOSTIC BUTTON');
-                    return (
-                      <DropdownMenuItem asChild className="rounded-xl hover:bg-orange-50 dark:hover:bg-orange-950/50 cursor-pointer">
-                        <Link to="/presence-debug" className="flex items-center gap-3 w-full">
-                          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
-                            <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                          </div>
-                          <span className="font-medium">🔧 Diagnostic Présence</span>
-                        </Link>
-                      </DropdownMenuItem>
-                    );
-                  })()}
+
 
                   {isAdmin && (
                     <DropdownMenuItem asChild className="rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/50 cursor-pointer">
@@ -422,10 +402,7 @@ export const Navbar = () => {
 
                 {/* DÉCONNEXION */}
                 <DropdownMenuItem
-                  onClick={() => {
-                    console.log('🔴 LOGOUT BUTTON CLICKED - Desktop menu');
-                    signOut();
-                  }}
+                  onClick={() => signOut()}
                   className="rounded-xl hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer text-red-600 dark:text-red-400"
                 >
                   <div className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center mr-3">
@@ -553,7 +530,7 @@ export const Navbar = () => {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <BarChart3 className="h-5 w-5" />
-                    <span className="font-medium">Tableau de bord</span>
+                    <span className="font-medium">Statistiques</span>
                   </Link>
 
                   <Link
@@ -581,7 +558,6 @@ export const Navbar = () => {
                   variant="destructive"
                   className="w-full justify-start gap-3"
                   onClick={() => {
-                    console.log('🔴 LOGOUT BUTTON CLICKED - Mobile menu');
                     signOut();
                     setMobileMenuOpen(false);
                   }}

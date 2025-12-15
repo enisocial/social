@@ -1,18 +1,14 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { useInView } from 'react-intersection-observer';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { FacebookFeedLayout } from '@/components/feed/FacebookFeedLayout';
 import { UnifiedFeedCard } from '@/components/UnifiedFeedCard';
 import { PostCardSkeleton } from '@/components/PostCardSkeleton';
 import { useUnifiedFeed } from '@/hooks/useUnifiedFeed';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Sparkles, RefreshCw, TrendingUp, Users, Clock, Zap, Heart, MessageCircle, Eye, Star, Crown, Flame, Target, Activity } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Loader2, Sparkles, Users, Clock, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { motion } from 'framer-motion';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 const Feed = () => {
   const { user, loading } = useAuth();
@@ -21,57 +17,14 @@ const Feed = () => {
   const [feedMode, setFeedMode] = useState<'recommended' | 'recent' | 'friends'>('recommended');
   const [isFeedReady, setIsFeedReady] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
-  const isMobile = useIsMobile();
+  const { ref: loadMoreRef, inView } = useInView({
+    threshold: 0,
+    rootMargin: '100px'
+  });
 
-  // Pull-to-refresh state
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [startY, setStartY] = useState<number | null>(null);
-  const [canRefresh, setCanRefresh] = useState(false);
-
-  // Pull-to-refresh handlers (mobile only)
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || !parentRef.current || parentRef.current.scrollTop > 10) return;
-    setStartY(e.touches[0].clientY);
-  }, [isMobile]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || startY === null || isRefreshing) return;
-
-    const currentY = e.touches[0].clientY;
-    const deltaY = currentY - startY;
-
-    if (deltaY > 0) { // Only handle downward pulls
-      const distance = Math.min(deltaY * 0.5, 80); // Dampen the pull and cap at 80px
-      setPullDistance(distance);
-      setCanRefresh(distance > 50); // Trigger refresh when pulled 50px
-    }
-  }, [isMobile, startY, isRefreshing]);
-
-  const handleTouchEnd = useCallback(async () => {
-    if (!isMobile || !canRefresh || isRefreshing) {
-      setPullDistance(0);
-      setStartY(null);
-      setCanRefresh(false);
-      return;
-    }
-
-    // Trigger refresh
-    setIsRefreshing(true);
-    setPullDistance(0);
-    setStartY(null);
-    setCanRefresh(false);
-
-    try {
-      // Invalidate and refetch feed data
-      await queryClient.invalidateQueries({ queryKey: ['unified-feed'] });
-      // Wait a bit for the refresh animation
-      setTimeout(() => setIsRefreshing(false), 1000);
-    } catch (error) {
-      console.error('Refresh error:', error);
-      setIsRefreshing(false);
-    }
-  }, [isMobile, canRefresh, isRefreshing, queryClient]);
+  // Pull-to-refresh disabled for now due to virtual scrolling conflicts
+  const isRefreshing = false;
+  const pullDistance = 0;
 
   const {
     items,
@@ -83,7 +36,8 @@ const Feed = () => {
     trackPostClick,
     trackTimeSpent,
     trackListen,
-    recordSignal
+    recordSignal,
+    error
   } = useUnifiedFeed(user?.id, feedMode);
 
   // Différer l'initialisation du virtual scrolling pour de meilleures performances
@@ -134,70 +88,15 @@ const Feed = () => {
     setIsFeedReady(false); // Reset pour recharger
   }, []);
 
-  // Estimate size for virtual scrolling - optimisé pour éviter les recalculs
-  const getItemSize = useCallback((index: number) => {
-    const item = items[index];
-    if (!item) return 700; // Default size with footer
-
-    let size = 300; // Base size for header, content, footer and margins
-
-    // Header size (avatar, name, badges, etc.)
-    size += 120;
-
-    // Content size - optimisé
-    const contentLength = item.content?.length || 0;
-    if (contentLength > 0) {
-      size += Math.min(80 + (contentLength / 50) * 20, 150); // Dynamic content height
+  // Automatic infinite scrolling
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      console.log('🔄 AUTO FETCHING NEXT PAGE (intersection observer)...');
+      fetchNextPage();
     }
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-    // Media size - optimisé avec calcul plus précis
-    if (item.type === 'post') {
-      const mediaCount = item.post_media?.length || 0;
-      const hasVideo = item.post_media?.some(media => media.media_type === 'video') || false;
 
-      if (mediaCount > 0) {
-        if (mediaCount === 1) {
-          size += hasVideo ? 550 : 400; // Single media - larger for videos
-        } else if (mediaCount === 2) {
-          size += hasVideo ? 350 : 250; // Two media side by side, taller for videos
-        } else if (mediaCount === 3) {
-          size += hasVideo ? 450 : 350; // 3 media - special layout, taller for videos
-        } else if (mediaCount <= 4) {
-          size += hasVideo ? 400 : 300; // 4 media grid, taller for videos
-        } else {
-          size += hasVideo ? 550 : 450; // Many media, taller for videos
-        }
-      }
-    } else if (item.type === 'voice_post') {
-      // Voice posts have a fixed size with waveform
-      size += 200; // Player + waveform height
-    }
-
-    // Link preview
-    if (item.link_preview) size += 180;
-
-    // Tags section
-    const tagsCount = item.post_tags?.length || 0;
-    if (tagsCount > 0) size += 40;
-
-    // Reactions/stats section
-    if (item.likes_count > 0 || item.comments_count > 0 || item.shares_count > 0) {
-      size += 50;
-    }
-
-    // Footer with actions - TOUJOURS COMPTE
-    size += 80; // Fixed footer height
-
-    return Math.min(size, 1200); // Cap at 1200px
-  }, [items]);
-
-  // Virtual scrolling setup - seulement quand prêt
-  const rowVirtualizer = useVirtualizer({
-    count: isFeedReady ? items.length : 0,
-    getScrollElement: () => parentRef.current,
-    estimateSize: getItemSize,
-    overscan: isMobile ? 2 : 3, // Reduced overscan for mobile performance
-  });
 
   useEffect(() => {
     if (!loading && !user) {
@@ -279,43 +178,50 @@ const Feed = () => {
         )}
       </div>
 
-      {/* Pull-to-refresh indicator (mobile only) */}
-      {isMobile && (pullDistance > 0 || isRefreshing) && (
-        <div
-          className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-border flex items-center justify-center py-2 transition-all duration-200"
-          style={{
-            transform: `translateY(${Math.max(-60, pullDistance - 60)}px)`,
-            opacity: pullDistance > 0 ? Math.min(pullDistance / 50, 1) : 1
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <RefreshCw className={`h-5 w-5 text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="text-sm text-muted-foreground">
-              {isRefreshing ? 'Actualisation...' : canRefresh ? 'Lâchez pour actualiser' : 'Tirez pour actualiser'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Posts Feed with Virtual Scrolling */}
+      {/* Posts Feed */}
       <div
         ref={parentRef}
         className="h-full overflow-auto"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={isMobile && pullDistance > 0 ? {
-          transform: `translateY(${pullDistance}px)`,
-          transition: 'none'
-        } : {}}
       >
         {postsLoading && !items.length ? (
+          // Loading state with skeletons
           <div className="space-y-4 p-4">
-            {[...Array(2)].map((_, i) => (
+            {[...Array(3)].map((_, i) => (
               <PostCardSkeleton key={i} index={i} />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : error ? (
+          // Error state with retry option
+          <div className="flex items-center justify-center min-h-[60vh] p-8">
+            <div className="text-center max-w-md">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Activity className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Erreur de chargement
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                Impossible de charger le contenu. Vérifiez votre connexion internet.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="default"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Actualiser la page
+                </Button>
+                <Button
+                  onClick={() => handleFeedModeChange('recommended')}
+                  variant="outline"
+                >
+                  Réessayer
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : items.length === 0 && !postsLoading ? (
+          // Empty state (no content available)
           <div className="flex items-center justify-center min-h-[60vh] p-8">
             <div className="text-center max-w-md">
               <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -350,6 +256,7 @@ const Feed = () => {
             </div>
           </div>
         ) : (
+          // Content loaded successfully
           <div className="space-y-0">
             {items.map((item, index) => (
               <div key={item.id} className="px-0">
@@ -369,23 +276,32 @@ const Feed = () => {
               </div>
             ))}
 
-            {/* Load more trigger */}
+            {/* Invisible load more trigger for intersection observer */}
             {hasNextPage && !isFetchingNextPage && (
-              <div className="flex justify-center py-8">
-                <Button
-                  onClick={() => fetchNextPage()}
-                  variant="outline"
-                  className="px-6 py-2"
-                >
-                  Charger plus de posts
-                </Button>
-              </div>
+              <div ref={loadMoreRef} className="h-4" />
             )}
 
             {/* Loading indicator */}
             {isFetchingNextPage && (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  <span className="text-sm text-gray-600">Chargement en cours...</span>
+                </div>
+              </div>
+            )}
+
+            {/* End of feed indicator */}
+            {!hasNextPage && items.length > 0 && !postsLoading && (
+              <div className="flex justify-center py-8">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span className="text-2xl">🎉</span>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Vous avez vu tous les posts !
+                  </p>
+                </div>
               </div>
             )}
           </div>

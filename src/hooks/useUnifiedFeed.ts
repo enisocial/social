@@ -60,17 +60,23 @@ interface UnifiedFeedItem {
 export const useUnifiedFeed = (userId: string | undefined, filterType: 'recommended' | 'recent' | 'friends' = 'recommended') => {
   const queryClient = useQueryClient();
 
-  // Écouter les événements de création de posts vocaux
+  // Écouter les événements de création et suppression de posts vocaux
   useEffect(() => {
     const handleVoicePostCreated = () => {
       queryClient.invalidateQueries({ queryKey: ['unified-feed'] });
     };
 
+    const handleVoicePostDeleted = () => {
+      queryClient.invalidateQueries({ queryKey: ['unified-feed'] });
+    };
+
     if (typeof window !== 'undefined') {
       window.addEventListener('voice-post-created', handleVoicePostCreated);
+      window.addEventListener('voice-post-deleted', handleVoicePostDeleted);
 
       return () => {
         window.removeEventListener('voice-post-created', handleVoicePostCreated);
+        window.removeEventListener('voice-post-deleted', handleVoicePostDeleted);
       };
     }
   }, [queryClient]);
@@ -270,13 +276,31 @@ export const useUnifiedFeed = (userId: string | undefined, filterType: 'recommen
           return transformed;
         });
 
-        // Combiner et trier par date (algorithme simple pour l'instant)
+        // Combiner et trier par date
         const allItems = [...transformedPosts, ...transformedVoicePosts]
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+        // Déterminer correctement s'il y a plus de données
+        // Continuer tant qu'au moins une table retourne pageSize éléments
+        // S'arrêter seulement quand les deux tables ont moins de pageSize éléments
+        const hasMoreData = rawPosts.length >= pageSize || rawVoicePosts.length >= pageSize;
+
+        console.log('📊 PAGINATION DEBUG:', {
+          pageParam,
+          pageSize,
+          rawPostsCount: rawPosts.length,
+          rawVoicePostsCount: rawVoicePosts.length,
+          totalItemsFetched: rawPosts.length + rawVoicePosts.length,
+          allItemsCount: allItems.length,
+          hasMoreData,
+          nextOffset: hasMoreData ? pageParam + 1 : null,
+          postsHasMore: rawPosts.length >= pageSize,
+          voicePostsHasMore: rawVoicePosts.length >= pageSize
+        });
+
         const result = {
-          items: allItems.slice(0, pageSize), // Garder seulement pageSize éléments
-          nextOffset: allItems.length >= pageSize ? pageParam + 1 : null
+          items: allItems,
+          nextOffset: hasMoreData ? pageParam + 1 : null
         };
 
         console.log(`✅ UNIFIED FEED SUCCESS: ${result.items.length} items loaded (${transformedPosts.length} posts, ${transformedVoicePosts.length} voice posts)`);
@@ -296,6 +320,8 @@ export const useUnifiedFeed = (userId: string | undefined, filterType: 'recommen
 
       } catch (err) {
         console.error('🚨 UNIFIED FEED FAILED:', err);
+        // Return empty result instead of throwing to prevent feed crash
+        console.warn('⚠️ Returning empty feed due to error');
         return { items: [], nextOffset: null };
       }
     },

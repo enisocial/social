@@ -53,16 +53,21 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [finalDuration, setFinalDuration] = useState(0);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [currentDeviceInfo, setCurrentDeviceInfo] = useState<string>('');
+  const [recordingCompleted, setRecordingCompleted] = useState(false);
+  const [displayDuration, setDisplayDuration] = useState(0); // Force display update
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
 
   const MAX_DURATION = 60; // 60 seconds max
 
@@ -160,6 +165,12 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
 
       mediaRecorder.onstop = () => {
         console.log('🛑 ENREGISTREMENT ARRÊTÉ - Traitement final');
+        console.log('🔍 VALEURS ACTUELLES:', {
+          recordingStartTime,
+          recordingTime,
+          DateNow: Date.now()
+        });
+
         try {
           console.log('📦 Création du blob audio...');
           const audioBlob = new Blob(audioChunksRef.current, {
@@ -167,17 +178,43 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
           });
           const url = URL.createObjectURL(audioBlob);
 
+          // Calculate final duration accurately using ref for reliability
+          let finalDurationSeconds: number;
+          const startTimeRef = recordingStartTimeRef.current;
+          if (startTimeRef) {
+            finalDurationSeconds = Math.max(1, Math.floor((Date.now() - startTimeRef) / 1000));
+            console.log('⏱️ DURÉE CALCULÉE depuis startTimeRef:', finalDurationSeconds, 'secondes');
+          } else if (recordingStartTime) {
+            finalDurationSeconds = Math.max(1, Math.floor((Date.now() - recordingStartTime) / 1000));
+            console.log('⏱️ DURÉE CALCULÉE depuis recordingStartTime state:', finalDurationSeconds, 'secondes');
+          } else {
+            finalDurationSeconds = Math.max(1, recordingTime);
+            console.log('⏱️ DURÉE CALCULÉE depuis recordingTime (fallback):', finalDurationSeconds, 'secondes');
+          }
+
           console.log('🎵 Blob créé, mise à jour état...');
+
+          // CRITICAL: Update states in correct order
+          console.log('🔄 MISE À JOUR ÉTATS - Durée finale:', finalDurationSeconds);
+
+          // Update in this specific order to ensure proper display
+          setFinalDuration(finalDurationSeconds);
+          console.log('✅ setFinalDuration appelé avec:', finalDurationSeconds);
+
+          setRecordingCompleted(true);
+          console.log('✅ setRecordingCompleted appelé avec: true');
+
+          // Force display update with a separate state
+          setDisplayDuration(finalDurationSeconds);
+          console.log('✅ setDisplayDuration forcé avec:', finalDurationSeconds);
+
           setAudioBlob(audioBlob);
           setAudioUrl(url);
           setIsRecording(false);
           setRecordingTime(0);
+          setRecordingStartTime(null);
 
-          console.log('✅ Audio finalisé:', {
-            size: audioBlob.size,
-            type: audioBlob.type,
-            chunks: audioChunksRef.current.length
-          });
+          console.log('✅ TOUS ÉTATS MIS À JOUR - Affichage devrait montrer:', finalDurationSeconds, 'secondes');
 
           // Stop all tracks
           console.log('🔇 Arrêt des tracks audio...');
@@ -201,21 +238,25 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
 
       // Démarrer l'enregistrement
       console.log('🎬 DÉMARRAGE ENREGISTREMENT...');
+      const startTime = Date.now();
+      recordingStartTimeRef.current = startTime; // Store in ref for reliable access
+      setRecordingStartTime(startTime); // Also update state for consistency
       mediaRecorder.start(1000); // Collect data every second
       setRecordingTime(0);
       console.log('✅ MediaRecorder.start() appelé');
 
       // Start timer
       timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
         setRecordingTime(prev => {
-          if (prev >= MAX_DURATION) {
+          if (elapsed >= MAX_DURATION) {
             console.log('⏰ DURÉE MAX ATTEINTE - Arrêt automatique');
             stopRecording();
             return prev;
           }
-          return prev + 1;
+          return elapsed;
         });
-      }, 1000);
+      }, 100); // Update more frequently for better accuracy
       console.log('✅ Timer démarré');
 
       console.log('✅ ENREGISTREMENT DÉMARRÉ AVEC SUCCÈS - TOUT FONCTIONNE !');
@@ -284,6 +325,11 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
     setAudioBlob(null);
     setAudioUrl(null);
     setRecordingTime(0);
+    setFinalDuration(0);
+    setDisplayDuration(0); // Reset display duration too
+    setRecordingStartTime(null);
+    recordingStartTimeRef.current = null; // Reset ref too
+    setRecordingCompleted(false);
     setIsPaused(false);
   }, [stopRecording]);
 
@@ -302,29 +348,41 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
 
   // Handle publish
   const handlePublish = useCallback(async () => {
+    console.log('🎤 PUBLISH - Validation des données...');
+    console.log('AudioBlob exists:', !!audioBlob);
+    console.log('FinalDuration:', finalDuration);
+    console.log('RecordingCompleted:', recordingCompleted);
+
     if (!audioBlob) {
       toast.error('Aucun audio à publier');
       return;
     }
 
-    if (recordingTime < 1) {
+    // Use the most reliable duration available
+    const durationToUse = recordingCompleted ? finalDuration : recordingTime;
+    console.log('Duration to use for validation:', durationToUse);
+
+    if (durationToUse < 1) {
       toast.error('L\'enregistrement est trop court');
       return;
     }
 
     try {
+      console.log('🎤 Starting voice post creation...');
       const result = await createVoicePost(
         audioBlob,
         title.trim() || undefined,
         (progress) => {
-          // Progress callback - no logging in production
+          console.log('Upload progress:', progress + '%');
         },
-        recordingTime
+        durationToUse
       );
 
       if (result) {
+        console.log('✅ Voice post created successfully:', result);
         toast.success('Post vocal publié avec succès ! 🎉');
       } else {
+        console.error('❌ Voice post creation returned null/undefined');
         toast.error('Une erreur inattendue s\'est produite. Veuillez réessayer.');
         return;
       }
@@ -341,7 +399,7 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
       console.error('❌ Error publishing voice post:', error);
       toast.error('Erreur lors de la publication du post vocal');
     }
-  }, [audioBlob, recordingTime, title, createVoicePost, onSuccess, onClose, navigate]);
+  }, [audioBlob, finalDuration, recordingTime, recordingCompleted, title, createVoicePost, onSuccess, onClose, navigate]);
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -349,6 +407,28 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Debug: Log state changes
+  React.useEffect(() => {
+    console.log('🔍 STATE DEBUG:', {
+      recordingCompleted,
+      finalDuration,
+      recordingTime,
+      isRecording,
+      audioBlob: !!audioBlob
+    });
+  }, [recordingCompleted, finalDuration, recordingTime, isRecording, audioBlob]);
+
+  // Force re-render when recording completes
+  React.useEffect(() => {
+    if (recordingCompleted && finalDuration > 0) {
+      console.log('🎯 RECORDING COMPLETED - Force re-render with duration:', finalDuration);
+      // Force a re-render by updating a dummy state
+      setTimeout(() => {
+        console.log('✅ Display should now show:', formatTime(finalDuration));
+      }, 100);
+    }
+  }, [recordingCompleted, finalDuration]);
 
   // Cleanup on unmount
   React.useEffect(() => {
@@ -521,7 +601,7 @@ export const CreateVoicePost: React.FC<CreateVoicePostProps> = ({
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center space-x-1">
                   <Volume2 className="w-4 h-4" />
-                  <span>Durée: {formatTime(recordingTime)}</span>
+                  <span>Durée: {formatTime(recordingCompleted ? displayDuration : recordingTime)}</span>
                 </span>
                 <span>Taille: {(audioBlob.size / 1024 / 1024).toFixed(1)} MB</span>
               </div>

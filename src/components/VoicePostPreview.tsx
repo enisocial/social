@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, Heart, MessageCircle, Share, MoreHorizontal, Send, Edit, Trash2, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -64,6 +64,9 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [listenStartTime, setListenStartTime] = useState<number | null>(null);
+  const [lastListenUpdate, setLastListenUpdate] = useState<number>(0);
+  const [hasBeenManuallyControlled, setHasBeenManuallyControlled] = useState(false);
+  const [hasAutoPlayedOnce, setHasAutoPlayedOnce] = useState(false);
 
   // État pour les commentaires
   const [showComments, setShowComments] = useState(false);
@@ -145,16 +148,38 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
         observer.unobserve(containerRef.current);
       }
     };
-  }, [hasViewed]);
+  }, []); // Remove hasViewed from dependencies to prevent infinite loop
 
-  // Auto-play quand visible
+  // Stable callback for handling audio state changes
+  const handleAudioStateChange = useCallback(() => {
+    if (audioRef.current) {
+      if (!isVisible && (isPlaying || isAutoPlaying)) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+        setIsAutoPlaying(false);
+        // Signaler le temps d'écoute avec debounce
+        if (listenStartTime) {
+          const listenDuration = Date.now() - listenStartTime;
+          const now = Date.now();
+          if (now - lastListenUpdate > 2000) { // Only update every 2 seconds
+            onListen(id, listenDuration / 1000, false);
+            setLastListenUpdate(now);
+          }
+          setListenStartTime(null);
+        }
+      }
+    }
+  }, [isVisible, isPlaying, isAutoPlaying, listenStartTime, lastListenUpdate, id, onListen]);
+
+  // Auto-play quand visible (une seule fois)
   useEffect(() => {
-    if (isVisible && !isPlaying && !isAutoPlaying) {
+    if (isVisible && !isPlaying && !isAutoPlaying && !hasAutoPlayedOnce && !hasBeenManuallyControlled) {
       const timer = setTimeout(() => {
-        if (audioRef.current && isVisible) {
+        if (audioRef.current && isVisible && !hasAutoPlayedOnce && !hasBeenManuallyControlled) {
           audioRef.current.play().then(() => {
             setIsPlaying(true);
             setIsAutoPlaying(true);
+            setHasAutoPlayedOnce(true);
             setListenStartTime(Date.now());
           }).catch(() => {
             // Auto-play bloqué par navigateur, pas grave
@@ -163,20 +188,13 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
       }, 500); // Délai pour éviter les conflits
 
       return () => clearTimeout(timer);
-    } else if (!isVisible && (isPlaying || isAutoPlaying)) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-        setIsAutoPlaying(false);
-        // Signaler le temps d'écoute
-        if (listenStartTime) {
-          const listenDuration = Date.now() - listenStartTime;
-          onListen(id, listenDuration / 1000, false);
-          setListenStartTime(null);
-        }
-      }
     }
-  }, [isVisible, isPlaying, isAutoPlaying, id, onListen, listenStartTime]);
+  }, [isVisible, isPlaying, isAutoPlaying, hasAutoPlayedOnce, hasBeenManuallyControlled]);
+
+  // Handle visibility changes separately
+  useEffect(() => {
+    handleAudioStateChange();
+  }, [handleAudioStateChange]);
 
   // Fonction de partage - ouvre le ShareDialog
   const handleShare = () => {
@@ -245,14 +263,21 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Marquer comme contrôlé manuellement dès la première interaction
+    setHasBeenManuallyControlled(true);
+
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
       setIsAutoPlaying(false);
-      // Signaler le temps d'écoute
+      // Signaler le temps d'écoute avec debounce
       if (listenStartTime) {
         const listenDuration = Date.now() - listenStartTime;
-        onListen(id, listenDuration / 1000, false);
+        const now = Date.now();
+        if (now - lastListenUpdate > 2000) { // Only update every 2 seconds
+          onListen(id, listenDuration / 1000, false);
+          setLastListenUpdate(now);
+        }
         setListenStartTime(null);
       }
     } else {
@@ -320,38 +345,49 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 mb-6 overflow-hidden">
-      {/* Header avec avatar et info utilisateur */}
-      <div className="flex items-center justify-between p-4 pb-3">
-        <div className="flex items-center gap-3">
-          <Avatar className="w-12 h-12 ring-2 ring-pink-500/20">
-            <AvatarImage src={avatar_url || undefined} alt={name} />
-            <AvatarFallback className="bg-gradient-to-br from-pink-500 to-purple-600 text-white font-semibold">
-              {name.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-semibold text-gray-900 dark:text-white text-base">{name}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              @{username} · {formatDistanceToNow(new Date(created_at), { addSuffix: true, locale: fr })}
+    <div ref={containerRef} className="bg-gradient-to-br from-white via-gray-50/30 to-white dark:from-gray-900 dark:via-gray-800/50 dark:to-gray-900 rounded-2xl shadow-xl border border-gray-100/50 dark:border-gray-700/50 mb-8 overflow-hidden backdrop-blur-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+      {/* Header avec avatar et info utilisateur - Design professionnel */}
+      <div className="flex items-center justify-between p-6 pb-4">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Avatar className="w-14 h-14 ring-4 ring-gradient-to-br from-blue-400 via-purple-500 to-pink-500 shadow-lg">
+              <AvatarImage src={avatar_url || undefined} alt={name} />
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 text-white font-bold text-lg shadow-inner">
+                {name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {/* Indicateur de statut */}
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-3 border-white dark:border-gray-900 shadow-md"></div>
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{name}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+              @{username}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+              {formatDistanceToNow(new Date(created_at), { addSuffix: true, locale: fr })}
             </p>
           </div>
         </div>
         {isOwner && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full w-8 h-8 p-0">
-                <MoreHorizontal className="w-4 h-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full w-10 h-10 p-0 shadow-sm hover:shadow-md transition-all duration-200"
+              >
+                <MoreHorizontal className="w-5 h-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleEdit} className="cursor-pointer">
-                <Edit className="w-4 h-4 mr-3" />
-                Modifier
+            <DropdownMenuContent align="end" className="w-52 shadow-xl border-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-xl">
+              <DropdownMenuItem onClick={handleEdit} className="cursor-pointer rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                <Edit className="w-4 h-4 mr-3 text-blue-600" />
+                <span className="font-medium">Modifier</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDelete} className="text-red-600 cursor-pointer">
+              <DropdownMenuItem onClick={handleDelete} className="text-red-600 cursor-pointer rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                 <Trash2 className="w-4 h-4 mr-3" />
-                Supprimer
+                <span className="font-medium">Supprimer</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -367,57 +403,71 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
         </div>
       )}
 
-      {/* Player audio professionnel - Format large comme vidéo */}
-      <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-black mx-4 mb-4 rounded-2xl overflow-hidden shadow-2xl">
-        {/* Overlay de contrôle */}
-        <div className="absolute inset-0 bg-black/20 z-10" />
+      {/* Player audio ultra-moderne - Design professionnel inspiré de Spotify */}
+      <div className="relative mx-6 mb-6 rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 border border-purple-500/20">
+        {/* Fond animé subtil */}
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 via-pink-600/5 to-blue-600/10 animate-pulse"></div>
 
-        {/* Bouton play central */}
-        <div className="absolute inset-0 flex items-center justify-center z-20">
-          <Button
-            onClick={togglePlayPause}
-            className="w-20 h-20 rounded-full bg-white/90 hover:bg-white text-black shadow-2xl backdrop-blur-sm transition-all duration-300 hover:scale-105"
-            size="lg"
-          >
-            {isPlaying ? (
-              <Pause className="w-8 h-8" />
-            ) : (
-              <Play className="w-8 h-8 ml-1" />
-            )}
-          </Button>
+        {/* Bouton play central avec design premium */}
+        <div className="relative z-20 flex items-center justify-center py-12 px-8">
+          <div className="relative group">
+            {/* Anneau extérieur animé */}
+            <div className={`absolute inset-0 rounded-full border-4 transition-all duration-500 ${
+              isPlaying
+                ? 'border-green-400/50 scale-110 shadow-lg shadow-green-400/20'
+                : 'border-white/30 group-hover:border-white/50 group-hover:scale-105'
+            }`}></div>
+
+            {/* Bouton principal */}
+            <Button
+              onClick={togglePlayPause}
+              className="relative w-24 h-24 rounded-full bg-gradient-to-br from-white via-gray-50 to-gray-100 hover:from-gray-50 hover:to-white text-slate-900 shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105 active:scale-95 border-2 border-white/20"
+              size="lg"
+            >
+              {isPlaying ? (
+                <Pause className="w-10 h-10 drop-shadow-sm" />
+              ) : (
+                <Play className="w-10 h-10 ml-1 drop-shadow-sm" />
+              )}
+            </Button>
+          </div>
         </div>
 
-        {/* Indicateur auto-play */}
+        {/* Indicateur auto-play moderne */}
         {isAutoPlaying && (
-          <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1 z-20">
+          <div className="absolute top-6 left-6 z-30 bg-gradient-to-r from-green-500 to-emerald-500 backdrop-blur-md rounded-full px-4 py-2 shadow-lg border border-white/10">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-white text-xs font-medium">Lecture automatique</span>
+              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              <span className="text-white text-xs font-semibold tracking-wide">LECTURE AUTO</span>
             </div>
           </div>
         )}
 
-        {/* Ondes visuelles professionnelles */}
-        <div className="relative p-8 flex items-center justify-center min-h-[200px]">
-          <div className="flex items-center gap-1 w-full max-w-md">
+        {/* Ondes visuelles ultra-modernes */}
+        <div className="relative px-8 pb-8 flex items-center justify-center">
+          <div className="flex items-center gap-0.5 w-full max-w-lg">
             {waveformBars.map((height, index) => {
               const isActive = progress > 0 && (index / waveformBars.length) * 100 <= progress;
               const isCurrent = Math.abs((index / waveformBars.length) * 100 - progress) < 1;
+              const isNearCurrent = Math.abs((index / waveformBars.length) * 100 - progress) < 2;
 
               return (
                 <div
                   key={index}
-                  className={`flex-1 rounded-full transition-all duration-300 ${
+                  className={`w-1 rounded-full transition-all duration-300 ${
                     isCurrent
-                      ? 'bg-pink-400 shadow-lg shadow-pink-500/50'
+                      ? 'bg-gradient-to-t from-pink-400 to-purple-400 shadow-lg shadow-pink-500/50'
+                      : isNearCurrent
+                      ? 'bg-gradient-to-t from-purple-300 to-pink-300'
                       : isActive
-                      ? 'bg-white/80'
-                      : 'bg-white/30'
+                      ? 'bg-white/90'
+                      : 'bg-white/40 hover:bg-white/60'
                   }`}
                   style={{
-                    height: `${Math.max(4, height * 80)}px`,
-                    transform: isCurrent ? 'scaleY(1.2)' : 'scaleY(1)',
-                    boxShadow: isCurrent ? '0 0 20px rgba(236, 72, 153, 0.6)' : 'none'
+                    height: `${Math.max(6, height * 120)}px`,
+                    transform: isCurrent ? 'scaleY(1.3) scaleX(1.2)' : isNearCurrent ? 'scaleY(1.1)' : 'scaleY(1)',
+                    boxShadow: isCurrent ? '0 0 25px rgba(236, 72, 153, 0.8), 0 0 50px rgba(147, 51, 234, 0.4)' : 'none',
+                    filter: isCurrent ? 'brightness(1.2) contrast(1.1)' : 'none'
                   }}
                 />
               );
@@ -425,19 +475,25 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
           </div>
         </div>
 
-        {/* Barre de progression en bas */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
-          <div
-            className="h-full bg-gradient-to-r from-pink-500 to-purple-600 transition-all duration-200"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        {/* Barre de progression moderne */}
+        <div className="relative mx-8 mb-6">
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden shadow-inner">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 rounded-full transition-all duration-300 shadow-lg relative"
+              style={{ width: `${progress}%` }}
+            >
+              {/* Glow effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 rounded-full blur-sm opacity-50"></div>
+            </div>
+          </div>
 
-        {/* Contrôles en bas à droite */}
-        <div className="absolute bottom-4 right-4 flex items-center gap-2 z-20">
-          <div className="bg-black/50 backdrop-blur-sm rounded-full px-3 py-1">
-            <span className="text-white text-xs font-medium">
-              {formatTime(currentTime)} / {formatTime(duration)}
+          {/* Indicateur de temps stylisé */}
+          <div className="flex justify-between items-center mt-3 text-xs font-semibold tracking-wider">
+            <span className="text-white/80 bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
+              {formatTime(currentTime)}
+            </span>
+            <span className="text-white/60">
+              {formatTime(duration)}
             </span>
           </div>
         </div>
@@ -451,105 +507,169 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
         />
       </div>
 
-      {/* Statistiques et actions */}
-      <div className="px-4 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-1">
-              <Eye className="w-4 h-4" />
-              <span>{viewsCount > 0 ? viewsCount : 0} vue{viewsCount !== 1 ? 's' : ''}</span>
+      {/* Statistiques et actions ultra-modernes */}
+      <div className="px-6 pb-6">
+        {/* Métriques avec design professionnel */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-6">
+            {/* Vues avec icône moderne */}
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 group">
+              <div className="p-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
+                <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {viewsCount > 0 ? viewsCount.toLocaleString() : '0'}
+              </span>
+              <span className="text-gray-500 dark:text-gray-500 text-xs">
+                vue{viewsCount !== 1 ? 's' : ''}
+              </span>
             </div>
-            <div className="flex items-center gap-1">
-              <Heart className={`w-4 h-4 ${user_liked ? 'text-red-500 fill-current' : ''}`} />
-              <span>{likes_count}</span>
+
+            {/* Likes avec animation */}
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 group">
+              <div className={`p-1.5 rounded-full transition-all duration-200 ${
+                user_liked
+                  ? 'bg-red-50 dark:bg-red-900/20'
+                  : 'bg-gray-50 dark:bg-gray-800/50 group-hover:bg-red-50 dark:group-hover:bg-red-900/20'
+              }`}>
+                <Heart className={`w-3.5 h-3.5 transition-all duration-200 ${
+                  user_liked
+                    ? 'text-red-500 fill-current scale-110'
+                    : 'text-gray-500 dark:text-gray-400 group-hover:text-red-500 group-hover:scale-110'
+                }`} />
+              </div>
+              <span className={`font-semibold transition-colors ${
+                user_liked ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'
+              }`}>
+                {likes_count.toLocaleString()}
+              </span>
+              <span className="text-gray-500 dark:text-gray-500 text-xs">like{likes_count !== 1 ? 's' : ''}</span>
             </div>
-            <div className="flex items-center gap-1">
-              <MessageCircle className="w-4 h-4" />
-              <span>{comments_count}</span>
+
+            {/* Commentaires */}
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 group">
+              <div className="p-1.5 rounded-full bg-green-50 dark:bg-green-900/20 group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
+                <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+              </div>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {comments_count.toLocaleString()}
+              </span>
+              <span className="text-gray-500 dark:text-gray-500 text-xs">commentaire{comments_count !== 1 ? 's' : ''}</span>
             </div>
-            <div className="flex items-center gap-1">
-              <Volume2 className="w-4 h-4" />
-              <span>{listens_count} écoutes</span>
+
+            {/* Écoutes */}
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 group">
+              <div className="p-1.5 rounded-full bg-purple-50 dark:bg-purple-900/20 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
+                <Volume2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {listens_count.toLocaleString()}
+              </span>
+              <span className="text-gray-500 dark:text-gray-500 text-xs">écoute{listens_count !== 1 ? 's' : ''}</span>
             </div>
           </div>
-          <div className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-            🎵 AUDIO
+
+          {/* Badge audio premium */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-full border border-purple-200/50 dark:border-purple-700/50">
+            <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-pulse"></div>
+            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 tracking-wide">
+              AUDIO
+            </span>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+        {/* Actions principales avec design premium */}
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             onClick={() => onLike(id)}
-            className={`flex-1 gap-2 rounded-lg transition-all duration-200 ${
+            className={`flex-1 h-12 gap-3 rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 ${
               user_liked
-                ? 'text-red-500 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
-                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                ? 'bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/30 dark:to-pink-900/30 text-red-600 dark:text-red-400 border-2 border-red-200 dark:border-red-700/50 shadow-lg shadow-red-500/20'
+                : 'bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-2 border-gray-200/50 dark:border-gray-600/50 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 dark:hover:from-red-900/20 dark:hover:to-pink-900/20 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-600/50 hover:shadow-lg hover:shadow-red-500/10'
             }`}
           >
-            <Heart className={`w-5 h-5 ${user_liked ? 'fill-current' : ''}`} />
-            <span className="font-medium">J'aime</span>
+            <Heart className={`w-5 h-5 transition-all duration-300 ${user_liked ? 'fill-current scale-110' : 'group-hover:scale-110'}`} />
+            <span>J'aime</span>
           </Button>
 
           <Button
             variant="ghost"
             onClick={handleCommentClick}
-            className="flex-1 gap-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-all duration-200"
+            className="flex-1 h-12 gap-3 rounded-xl font-semibold bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-2 border-gray-200/50 dark:border-gray-600/50 hover:bg-gradient-to-r hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-600/50 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 transform hover:scale-105"
           >
             <MessageCircle className="w-5 h-5" />
-            <span className="font-medium">Commenter</span>
+            <span>Commenter</span>
           </Button>
 
           <Button
             variant="ghost"
             onClick={handleShare}
-            className="flex-1 gap-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-all duration-200"
+            className="flex-1 h-12 gap-3 rounded-xl font-semibold bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-2 border-gray-200/50 dark:border-gray-600/50 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 dark:hover:from-green-900/20 dark:hover:to-emerald-900/20 hover:text-green-600 dark:hover:text-green-400 hover:border-green-300 dark:hover:border-green-600/50 hover:shadow-lg hover:shadow-green-500/10 transition-all duration-300 transform hover:scale-105"
           >
             <Share className="w-5 h-5" />
-            <span className="font-medium">Partager</span>
+            <span>Partager</span>
           </Button>
         </div>
       </div>
 
-      {/* Section commentaires avec design moderne */}
+      {/* Section commentaires ultra-moderne */}
       {showComments && (
-        <div className="border-t border-gray-200 dark:border-gray-700 px-4 pt-4">
-          <div className="space-y-4">
-            {/* Liste des commentaires */}
+        <div className="border-t border-gradient-to-r from-purple-200/50 via-pink-200/50 to-blue-200/50 dark:border-gradient-to-r dark:from-purple-700/30 dark:via-pink-700/30 dark:to-blue-700/30 px-6 pt-6">
+          <div className="space-y-6">
+            {/* Liste des commentaires avec design premium */}
             {loadingComments ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-500" />
-                <span className="ml-2 text-gray-500">Chargement...</span>
+              <div className="flex items-center justify-center py-12">
+                <div className="relative">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-purple-200 dark:border-purple-700"></div>
+                  <div className="absolute inset-0 animate-spin rounded-full h-8 w-8 border-4 border-transparent border-t-purple-500"></div>
+                </div>
+                <span className="ml-3 text-gray-600 dark:text-gray-400 font-medium">Chargement des commentaires...</span>
               </div>
             ) : (
-              <div className="space-y-4 max-h-80 overflow-y-auto">
+              <div className="space-y-5 max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-300 dark:scrollbar-thumb-purple-600 scrollbar-track-transparent">
                 {comments.length === 0 ? (
-                  <div className="text-center py-8">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                    <p className="text-gray-500 dark:text-gray-400">Aucun commentaire pour le moment</p>
+                  <div className="text-center py-12 bg-gradient-to-br from-gray-50/50 to-white/50 dark:from-gray-800/50 dark:to-gray-900/50 rounded-2xl border border-gray-100/50 dark:border-gray-700/50">
+                    <div className="p-2 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                      <MessageCircle className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Aucun commentaire</h3>
+                    <p className="text-gray-600 dark:text-gray-400 max-w-xs mx-auto leading-relaxed">
+                      Soyez le premier à partager votre avis sur ce post vocal !
+                    </p>
                   </div>
                 ) : (
-                  comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <Avatar className="w-10 h-10 flex-shrink-0">
-                        <AvatarImage src={comment.avatar_url || undefined} alt={comment.name} />
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
-                          {comment.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                  comments.map((comment, index) => (
+                    <div
+                      key={comment.id}
+                      className={`flex gap-4 group hover:bg-gradient-to-r hover:from-transparent hover:via-purple-50/30 hover:to-transparent dark:hover:via-purple-900/10 p-4 rounded-2xl transition-all duration-300 ${
+                        index === comments.length - 1 ? '' : 'border-b border-gray-100/50 dark:border-gray-700/30'
+                      }`}
+                    >
+                      <div className="relative">
+                        <Avatar className="w-12 h-12 ring-2 ring-purple-200/50 dark:ring-purple-700/50 shadow-md">
+                          <AvatarImage src={comment.avatar_url || undefined} alt={comment.name} />
+                          <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold shadow-inner">
+                            {comment.name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {/* Indicateur de statut */}
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl px-4 py-3">
-                          <p className="font-semibold text-sm text-gray-900 dark:text-white mb-1">
-                            {comment.name}
-                          </p>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                        <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-gray-800 dark:to-gray-700/80 rounded-2xl px-5 py-4 shadow-sm border border-gray-100/50 dark:border-gray-600/30 group-hover:shadow-md transition-all duration-300">
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="font-bold text-gray-900 dark:text-white text-sm">
+                              {comment.name}
+                            </p>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-600/50 px-2 py-0.5 rounded-full font-medium">
+                              {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true, locale: fr })}
+                            </span>
+                          </div>
+                          <p className="text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
                             {comment.content}
                           </p>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 px-2">
-                          {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true, locale: fr })}
-                        </p>
                       </div>
                     </div>
                   ))
@@ -557,30 +677,42 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
               </div>
             )}
 
-            {/* Champ d'ajout de commentaire moderne */}
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div className="flex gap-3">
-                <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.user_metadata?.name || 'Vous'} />
-                  <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-600 text-white text-sm font-semibold">
-                    {(user?.user_metadata?.name || user?.email || 'U').charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 flex gap-2">
-                  <Input
-                    placeholder="Écrivez un commentaire..."
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyPress={handleCommentKeyPress}
-                    className="flex-1 rounded-full border-gray-300 dark:border-gray-600 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                  <Button
-                    onClick={handleAddComment}
-                    disabled={!newComment.trim()}
-                    className="rounded-full bg-pink-500 hover:bg-pink-600 text-white px-4"
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
+            {/* Champ d'ajout de commentaire ultra-moderne */}
+            <div className="border-t border-gradient-to-r from-purple-200/50 via-pink-200/50 to-blue-200/50 dark:border-gradient-to-r dark:from-purple-700/30 dark:via-pink-700/30 dark:to-blue-700/30 pt-6">
+              <div className="bg-gradient-to-br from-white/80 to-gray-50/60 dark:from-gray-800/80 dark:to-gray-700/60 rounded-2xl p-5 shadow-lg border border-gray-100/50 dark:border-gray-600/30 backdrop-blur-sm">
+                <div className="flex gap-4">
+                  <div className="relative">
+                    <Avatar className="w-12 h-12 ring-2 ring-pink-200/50 dark:ring-pink-700/50 shadow-md">
+                      <AvatarImage src={user?.user_metadata?.avatar_url} alt={user?.user_metadata?.name || 'Vous'} />
+                      <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold shadow-inner">
+                        {(user?.user_metadata?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Indicateur de statut */}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                  </div>
+                  <div className="flex-1 flex gap-3 items-end">
+                    <div className="flex-1 relative">
+                      <Input
+                        placeholder="Partagez votre pensée..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyPress={handleCommentKeyPress}
+                        className="w-full pr-12 py-3 px-4 rounded-2xl border-2 border-gray-200 dark:border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white/80 dark:bg-gray-700/80 backdrop-blur-sm shadow-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 font-medium transition-all duration-200"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 font-medium">
+                        {newComment.length}/500
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleAddComment}
+                      disabled={!newComment.trim() || newComment.length > 500}
+                      className="h-12 px-6 rounded-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-purple-600 hover:from-purple-600 hover:via-pink-600 hover:to-purple-700 text-white font-bold shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    >
+                      <Send className="w-5 h-5 mr-2" />
+                      Publier
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
