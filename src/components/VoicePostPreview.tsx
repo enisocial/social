@@ -77,42 +77,8 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
   // État pour le partage
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
-  // État pour les vues
-  const [viewsCount, setViewsCount] = useState(0);
+  // État pour les vues - simplifié pour éviter les conflits
   const [hasViewed, setHasViewed] = useState(false);
-
-  // Fonction pour tracker les vues réelles
-  const trackView = async () => {
-    if (hasViewed) return;
-
-    try {
-      // Générer un ID de session unique pour éviter les doublons
-      const sessionId = `voice_post_view_${id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Stocker dans localStorage pour éviter les vues multiples par session
-      const localViewsKey = `voice_post_viewed_${id}`;
-      if (localStorage.getItem(localViewsKey)) {
-        // Déjà vu dans cette session
-        setHasViewed(true);
-        return;
-      }
-
-      // Marquer comme vu dans localStorage
-      localStorage.setItem(localViewsKey, 'true');
-
-      // Incrémenter le compteur local immédiatement pour une réponse instantanée
-      setViewsCount(prev => prev + 1);
-      setHasViewed(true);
-
-      console.log(`👁️ Vue trackée pour le post vocal ${id}`);
-
-      // TODO: Synchronisation avec la base de données quand la fonction RPC sera créée
-      // Pour l'instant, on utilise seulement le compteur local
-
-    } catch (error) {
-      console.error('Erreur lors du tracking de la vue:', error);
-    }
-  };
 
   const { user } = useAuth();
   const { getComments, addComment, deleteVoicePost } = useVoicePosts();
@@ -120,38 +86,35 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
   // Vérifier si l'utilisateur est le propriétaire du post
   const isOwner = user?.id === user_id;
 
-  // Intersection Observer pour auto-play et vues
+  // Intersection Observer pour auto-play et vues - simplifié pour éviter les conflits
   useEffect(() => {
+    if (!containerRef.current) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
-            setIsVisible(true);
-            // Tracker la vue quand le post devient visible
-            if (!hasViewed) {
-              trackView();
-            }
-          } else {
-            setIsVisible(false);
+        const entry = entries[0];
+        if (entry?.isIntersecting && entry.intersectionRatio >= 0.7) {
+          setIsVisible(true);
+          // Marquer comme vu (simplifié pour éviter les conflits)
+          if (!hasViewed) {
+            setHasViewed(true);
           }
-        });
+        } else {
+          setIsVisible(false);
+        }
       },
-      { threshold: 0.7 } // 70% visible pour déclencher
+      { threshold: 0.7 }
     );
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+    observer.observe(containerRef.current);
 
     return () => {
-      if (containerRef.current) {
-        observer.unobserve(containerRef.current);
-      }
+      observer.disconnect();
     };
-  }, []); // Remove hasViewed from dependencies to prevent infinite loop
+  }, [hasViewed]); // Dépendance minimale
 
-  // Stable callback for handling audio state changes
-  const handleAudioStateChange = useCallback(() => {
+  // Handle visibility changes - simplified to avoid infinite loops
+  useEffect(() => {
     if (audioRef.current) {
       if (!isVisible && (isPlaying || isAutoPlaying)) {
         audioRef.current.pause();
@@ -190,11 +153,6 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
       return () => clearTimeout(timer);
     }
   }, [isVisible, isPlaying, isAutoPlaying, hasAutoPlayedOnce, hasBeenManuallyControlled]);
-
-  // Handle visibility changes separately
-  useEffect(() => {
-    handleAudioStateChange();
-  }, [handleAudioStateChange]);
 
   // Fonction de partage - ouvre le ShareDialog
   const handleShare = () => {
@@ -518,10 +476,10 @@ export const VoicePostPreview: React.FC<VoicePostPreviewProps> = ({
                 <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               </div>
               <span className="font-semibold text-gray-700 dark:text-gray-300">
-                {viewsCount > 0 ? viewsCount.toLocaleString() : '0'}
+                0
               </span>
               <span className="text-gray-500 dark:text-gray-500 text-xs">
-                vue{viewsCount !== 1 ? 's' : ''}
+                vues
               </span>
             </div>
 

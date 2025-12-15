@@ -56,11 +56,13 @@ export const OnlineFriendsSidebar = () => {
   });
 
   // Combiner les amis avec les données de présence
-  const friends = rawFriends?.map(friend => ({
-    ...friend,
-    isOnline: isUserOnline(friend.id),
-    lastSeen: getLastSeen(friend.id)
-  }));
+  const friends = useMemo(() => {
+    return rawFriends?.map(friend => ({
+      ...friend,
+      isOnline: isUserOnline(friend.id),
+      lastSeen: getLastSeen(friend.id)
+    }));
+  }, [rawFriends, presenceState]);
 
   // Cache des conversations pour ouverture rapide
   const [conversationCache, setConversationCache] = useState<{ [friendId: string]: string | null }>({});

@@ -111,16 +111,16 @@ export const VoicePostCard: React.FC<VoicePostCardProps> = ({
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
     setCurrentTime(0);
-    // Record completed listen
-    if (audioRef.current) {
+    // Record completed listen - only if we have valid duration
+    if (audioRef.current && audioRef.current.duration && isFinite(audioRef.current.duration)) {
       onRecordListen(voicePost.id, audioRef.current.duration, true);
     }
   }, [voicePost.id, onRecordListen]);
 
   const handlePause = useCallback(() => {
     setIsPlaying(false);
-    // Record partial listen
-    if (audioRef.current && audioRef.current.currentTime > 0) {
+    // Record partial listen - only if we have valid currentTime
+    if (audioRef.current && audioRef.current.currentTime > 0 && isFinite(audioRef.current.currentTime)) {
       onRecordListen(voicePost.id, audioRef.current.currentTime, false);
     }
   }, [voicePost.id, onRecordListen]);

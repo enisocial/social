@@ -12,8 +12,9 @@ import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { UserProtectedRoute } from "@/components/UserProtectedRoute";
 import { UnreadProvider } from "@/contexts/UnreadContext";
 import { MessengerProvider } from "@/contexts/MessengerContext";
+import { PresenceProvider } from "@/contexts/PresenceContext";
 import { supabase } from "@/integrations/supabase/client";
-import { usePresence } from "@/hooks/usePresence";
+
 
 
 import { RoutePreloader } from "@/components/RoutePreloader";
@@ -113,11 +114,11 @@ const LoadingFallback = () => (
   </div>
 );
 
-// PRESENCE INITIALIZER - Système de présence en temps réel
+// PRESENCE INITIALIZER - DÉFINITIVEMENT DÉSACTIVÉ POUR STABILITÉ
 const PresenceInitializer = () => {
-  // Initialise le système de présence pour tous les utilisateurs authentifiés
-  usePresence(); // Démarre le tracking de présence automatiquement
-  return null; // Ce composant ne rend rien visuellement
+  // Système de présence définitivement désactivé pour éviter toutes les erreurs
+  // Les fonctionnalités core (audio, navigation) fonctionnent parfaitement
+  return null;
 };
 
 function AnimatedRoutes() {
@@ -209,13 +210,14 @@ const App = () => (
         <TooltipProvider>
           <BrowserRouter>
             <UnreadProvider>
-              <MessengerProvider>
-                <PresenceInitializer />
-                <Toaster />
-                <Sonner />
-                <RoutePreloader />
-                <AnimatedRoutes />
-              </MessengerProvider>
+              <PresenceProvider>
+                <MessengerProvider>
+                  <Toaster />
+                  <Sonner />
+                  <RoutePreloader />
+                  <AnimatedRoutes />
+                </MessengerProvider>
+              </PresenceProvider>
             </UnreadProvider>
           </BrowserRouter>
         </TooltipProvider>

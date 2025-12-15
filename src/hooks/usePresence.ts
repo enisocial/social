@@ -1,213 +1,152 @@
-import { useEffect, useState, useCallback } from 'react';
+// Hook de présence pour vérifier le statut des autres utilisateurs
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
-interface UserPresence {
-  user_id: string;
-  is_online: boolean;
-  last_seen: string | null;
-  current_page?: string;
-}
-
-interface PresenceState {
-  [userId: string]: UserPresence;
-}
+// Cache pour éviter les requêtes répétées
+const presenceCache = new Map<string, { isOnline: boolean; lastSeen: string | null; timestamp: number }>();
+const CACHE_DURATION = 30000; // 30 secondes
 
 export const usePresence = () => {
   const { user } = useAuth();
-  const [presenceState, setPresenceState] = useState<PresenceState>({});
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(false);
+  const [presenceState, setPresenceState] = useState<Record<string, boolean>>({});
 
-  // Simple presence update function - no useCallback to avoid circular dependencies
-  const updatePresence = async (online: boolean) => {
-    if (!user?.id) return false;
-
-    try {
-      const { error } = await supabase
-        .from('user_presence')
-        .upsert({
-          user_id: user.id,
-          is_online: online,
-          last_seen: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (!error) {
-        setIsOnline(online);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Presence update failed:', error);
-      return false;
-    }
-  };
-
-  // Subscribe to presence changes for friends
-  useEffect(() => {
+  // Mise à jour de présence très basique
+  const updatePresence = useCallback(async (online: boolean) => {
     if (!user?.id) return;
-
-    // FORCE CLEANUP: Clean up stale presence records on component mount
-    const forceCleanup = async () => {
-      try {
-        console.log('🧹 Force cleanup of stale presence records...');
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-
-        // Clean up all stale records (including potential stuck users like "toti koue yvan")
-        const { error: cleanupError } = await supabase
-          .from('user_presence')
-          .update({
-            is_online: false,
-            last_seen: new Date().toISOString()
-          })
-          .lt('updated_at', fiveMinutesAgo)
-          .eq('is_online', true);
-
-        if (cleanupError) {
-          console.error('❌ Cleanup error:', cleanupError);
-        } else {
-          console.log('✅ Stale presence records cleaned up');
-        }
-      } catch (error) {
-        console.error('💥 Exception during cleanup:', error);
-      }
-    };
-
-    // Get initial presence state for friends and current user
-    const fetchFriendsPresence = async () => {
-      try {
-        // First, force cleanup
-        await forceCleanup();
-
-        // Get user's friends first
-        const { data: friends } = await supabase
-          .from('friend_requests')
-          .select('sender_id, receiver_id')
-          .eq('status', 'accepted')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-          .limit(50);
-
-        const friendIds = new Set<string>();
-        friends?.forEach((req: any) => {
-          if (req.sender_id !== user.id) friendIds.add(req.sender_id);
-          if (req.receiver_id !== user.id) friendIds.add(req.receiver_id);
-        });
-
-        // Get presence for friends and current user
-        const allUserIds = [user.id, ...Array.from(friendIds)];
-        const { data: presenceData } = await supabase
-          .from('user_presence')
-          .select('user_id, is_online, last_seen')
-          .in('user_id', allUserIds);
-
-        const presenceMap: PresenceState = {};
-
-        // Initialize all friends as offline by default
-        allUserIds.forEach(userId => {
-          presenceMap[userId] = {
-            user_id: userId,
-            is_online: false,
-            last_seen: null
-          };
-        });
-
-        // Update with actual presence data if it exists
-        presenceData?.forEach((presence: any) => {
-          presenceMap[presence.user_id] = presence;
-        });
-
-        console.log('📊 Initial presence state loaded:', presenceMap);
-        setPresenceState(presenceMap);
-      } catch (error) {
-        console.error('Error fetching friends presence:', error);
-        // Fallback: empty state
-        setPresenceState({});
-      }
-    };
-
-    fetchFriendsPresence();
-
-    // Subscribe to presence changes
-    const channel = supabase
-      .channel('presence_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_presence'
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const presence = payload.new;
-            if (presence && typeof presence === 'object' && 'user_id' in presence && 'is_online' in presence) {
-              setPresenceState(prev => ({
-                ...prev,
-                [presence.user_id]: presence as UserPresence
-              }));
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    // Set user as online when component mounts
-    updatePresence(true);
-
-    // Handle page visibility changes
-    const handleVisibilityChange = () => {
-      updatePresence(!document.hidden);
-    };
-
-    const handleBeforeUnload = () => {
-      updatePresence(false);
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // Simplified heartbeat - just keep user online, cleanup is handled by database triggers
-    const heartbeat = setInterval(async () => {
-      if (!document.hidden) {
-        await updatePresence(true);
-      }
-    }, 30000); // Every 30 seconds - less frequent, more reliable
-
-    return () => {
-      channel.unsubscribe();
-      clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Set offline when component unmounts
-      updatePresence(false);
-    };
+    try {
+      await supabase.from('user_presence').upsert({
+        user_id: user.id,
+        is_online: online,
+        last_seen: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      setIsOnline(online);
+    } catch (error) {
+      // Silent error
+    }
   }, [user?.id]);
 
-  // Get presence info for a specific user
-  const getUserPresence = useCallback((userId: string): UserPresence | null => {
-    return presenceState[userId] || null;
-  }, [presenceState]);
-
-  // Check if user is online
+  // Vérifier si un utilisateur est en ligne (avec cache)
   const isUserOnline = useCallback((userId: string): boolean => {
-    const presence = presenceState[userId];
-    return presence?.is_online || false;
-  }, [presenceState]);
+    if (!userId) return false;
 
-  // Get last seen time
+    const cached = presenceCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.isOnline;
+    }
+
+    // Si pas en cache, faire une requête rapide
+    // Note: Cette fonction doit être synchrone, donc on retourne false par défaut
+    // et on met à jour le cache de manière asynchrone
+    const fetchPresence = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_presence')
+          .select('is_online, last_seen')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          const presence = data as any;
+          presenceCache.set(userId, {
+            isOnline: presence.is_online || false,
+            lastSeen: presence.last_seen || null,
+            timestamp: Date.now()
+          });
+
+          // Mettre à jour l'état local pour déclencher un re-render
+          setPresenceState(prev => ({ ...prev, [userId]: presence.is_online || false }));
+        } else {
+          // En cas d'erreur, considérer comme hors ligne
+          presenceCache.set(userId, {
+            isOnline: false,
+            lastSeen: null,
+            timestamp: Date.now()
+          });
+        }
+      } catch (error) {
+        // En cas d'erreur, considérer comme hors ligne
+        presenceCache.set(userId, {
+          isOnline: false,
+          lastSeen: null,
+          timestamp: Date.now()
+        });
+      }
+    };
+
+    fetchPresence();
+
+    // Retourner la valeur en cache ou false par défaut
+    return cached?.isOnline || false;
+  }, []);
+
+  // Obtenir la dernière connexion d'un utilisateur
   const getLastSeen = useCallback((userId: string): string | null => {
-    const presence = presenceState[userId];
-    return presence?.last_seen || null;
-  }, [presenceState]);
+    if (!userId) return null;
+
+    const cached = presenceCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.lastSeen;
+    }
+
+    // Même logique que isUserOnline
+    const fetchPresence = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_presence')
+          .select('is_online, last_seen')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          const presence = data as any;
+          presenceCache.set(userId, {
+            isOnline: presence.is_online || false,
+            lastSeen: presence.last_seen || null,
+            timestamp: Date.now()
+          });
+        } else {
+          presenceCache.set(userId, {
+            isOnline: false,
+            lastSeen: null,
+            timestamp: Date.now()
+          });
+        }
+      } catch (error) {
+        presenceCache.set(userId, {
+          isOnline: false,
+          lastSeen: null,
+          timestamp: Date.now()
+        });
+      }
+    };
+
+    fetchPresence();
+
+    return cached?.lastSeen || null;
+  }, []);
+
+  // Nettoyer le cache périodiquement
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      for (const [userId, data] of presenceCache.entries()) {
+        if (now - data.timestamp > CACHE_DURATION) {
+          presenceCache.delete(userId);
+        }
+      }
+    }, CACHE_DURATION);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return {
-    presenceState,
     isOnline,
     updatePresence,
-    getUserPresence,
     isUserOnline,
-    getLastSeen
+    getLastSeen,
+    presenceState
   };
 };
