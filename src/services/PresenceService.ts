@@ -35,10 +35,10 @@ class PresenceService {
         .from('user_presence')
         .upsert({
           user_id: this.currentUserId,
-          is_online: online,
+          online,
           last_seen: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'user_id' });
     } catch (error) {
       // Silent error - ne pas casser l'app
     }
@@ -60,37 +60,30 @@ class PresenceService {
     try {
       const { data, error } = await supabase
         .from('user_presence')
-        .select('is_online, last_seen')
+        .select('online, last_seen')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error || !data) {
-        return false;
-      }
-
-      return (data as any).is_online || false;
-    } catch (error) {
+      if (error || !data) return false;
+      return data.online || false;
+    } catch {
       return false;
     }
   }
 
-  // Obtenir la dernière connexion d'un utilisateur
   async getLastSeen(userId: string): Promise<string | null> {
     if (!userId) return null;
 
     try {
       const { data, error } = await supabase
         .from('user_presence')
-        .select('is_online, last_seen')
+        .select('last_seen')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error || !data) {
-        return null;
-      }
-
-      return (data as any).last_seen || null;
-    } catch (error) {
+      if (error || !data) return null;
+      return data.last_seen || null;
+    } catch {
       return null;
     }
   }

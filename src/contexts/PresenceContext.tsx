@@ -37,8 +37,7 @@ export const PresenceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Initialisation au montage - très simple
   useEffect(() => {
-    if (user?.id && !presenceService['isInitialized']) {
-      // Délai pour éviter les conflits de démarrage
+    if (user?.id) {
       const timer = setTimeout(() => {
         presenceService.initialize(user.id);
         setIsOnline(true);

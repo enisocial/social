@@ -91,7 +91,6 @@ export const MessengerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Cas nouveau chat: créer temporairement puis résoudre
     const tempId = `temp_${Date.now()}_${otherUser.id}`;
-    console.log('⚡ [MESSENGER] Création temporaire:', tempId);
 
     setConversations(prev => new Map(prev).set(tempId, {
       id: tempId,
@@ -104,38 +103,40 @@ export const MessengerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       isOpen: true
     }));
 
-    // Résoudre la conversation immédiatement
-    if (otherUser?.id) {
-      try {
-        const finalId = await findOrCreateConversation(otherUser.id, otherUser);
-        console.log('🎯 [MESSENGER] Résolution réussie:', finalId);
-
+    if (!otherUser?.id) {
+      // Pas d'ID utilisateur, fermer après 3s
+      setTimeout(() => {
         setConversations(prev => {
-          const tempData = prev.get(tempId);
-          if (tempData) {
-            console.log('🔄 [MESSENGER] Remplacement temp par réel');
-            const newMap = new Map(prev);
-            newMap.delete(tempId);
-            newMap.set(finalId, {
-              ...tempData,
-              id: finalId
-            });
-            return newMap;
-          }
-          return prev;
+          const newMap = new Map(prev);
+          newMap.delete(tempId);
+          return newMap;
         });
+      }, 3000);
+      return;
+    }
 
-      } catch (error) {
-        console.error('❌ [MESSENGER] Échec résolution:', error instanceof Error ? error.message : String(error));
-        // Fermer la chatbubble après 3 secondes si échec
-        setTimeout(() => {
-          setConversations(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(tempId);
-            return newMap;
-          });
-        }, 3000);
-      }
+    try {
+      const finalId = await findOrCreateConversation(otherUser.id, otherUser);
+
+      setConversations(prev => {
+        const tempData = prev.get(tempId);
+        if (tempData) {
+          const newMap = new Map(prev);
+          newMap.delete(tempId);
+          newMap.set(finalId, { ...tempData, id: finalId });
+          return newMap;
+        }
+        return prev;
+      });
+    } catch (error) {
+      // Fermer la chatbubble après 3 secondes si échec
+      setTimeout(() => {
+        setConversations(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(tempId);
+          return newMap;
+        });
+      }, 3000);
     }
 
   }, [findOrCreateConversation]);

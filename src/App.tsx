@@ -15,8 +15,6 @@ import { MessengerProvider } from "@/contexts/MessengerContext";
 import { PresenceProvider } from "@/contexts/PresenceContext";
 import { supabase } from "@/integrations/supabase/client";
 
-
-
 import { RoutePreloader } from "@/components/RoutePreloader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -114,10 +112,22 @@ const LoadingFallback = () => (
   </div>
 );
 
-// PRESENCE INITIALIZER - DÉFINITIVEMENT DÉSACTIVÉ POUR STABILITÉ
+// PRESENCE INITIALIZER - Activé avec délai pour stabilité
 const PresenceInitializer = () => {
-  // Système de présence définitivement désactivé pour éviter toutes les erreurs
-  // Les fonctionnalités core (audio, navigation) fonctionnent parfaitement
+  useEffect(() => {
+    const initPresence = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        // Délai pour laisser l'app se stabiliser avant d'initialiser la présence
+        setTimeout(() => {
+          import('@/services/PresenceService').then(({ presenceService }) => {
+            presenceService.initialize(session.user.id);
+          });
+        }, 3000);
+      }
+    };
+    initPresence();
+  }, []);
   return null;
 };
 
@@ -125,26 +135,28 @@ function AnimatedRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  console.log('AnimatedRoutes rendering:', {
-    pathname: location.pathname,
-    search: location.search,
-    hash: location.hash
-  });
-
-  // SYSTEM ADMIN AUTO-REDIRECT - admin@binkaa.com is system administrator
+  // SYSTEM ADMIN AUTO-REDIRECT - check DB role
   useEffect(() => {
-    const checkSystemAdminRedirect = async () => {
+    const checkAdminRedirect = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email === 'admin@binkaa.com') {
-        // System admin should NEVER access normal user pages
-        if (location.pathname === '/feed' || location.pathname === '/explore' || location.pathname === '/' || location.pathname === '/auth') {
-          console.log('🔑 SYSTEM ADMIN DETECTED - redirecting to admin dashboard');
-          navigate('/admin-dashboard', { replace: true });
-        }
+      if (!session?.user) return;
+
+      const publicPaths = ['/feed', '/explore', '/', '/auth'];
+      if (!publicPaths.includes(location.pathname)) return;
+
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      if (adminRole || session.user.email === 'admin@binkaa.com') {
+        navigate('/admin-dashboard', { replace: true });
       }
     };
 
-    checkSystemAdminRedirect();
+    checkAdminRedirect();
   }, [location.pathname, navigate]);
 
   return (
@@ -215,6 +227,7 @@ const App = () => (
                   <Toaster />
                   <Sonner />
                   <RoutePreloader />
+                  <PresenceInitializer />
                   <AnimatedRoutes />
                 </MessengerProvider>
               </PresenceProvider>

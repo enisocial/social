@@ -11,38 +11,25 @@ export const AdminProtectedRoute = ({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      console.log('AdminProtectedRoute check:', {
-        loading,
-        userEmail: user?.email,
-        userId: user?.id,
-        pathname: window.location.pathname
-      });
-
       if (!loading && user) {
-        // SPECIAL ADMIN SYSTEM: admin@binkaa.com is automatically admin
-        // No database checks needed - this is the system administrator
-        if (user.email === 'admin@binkaa.com') {
-          console.log('🔑 SYSTEM ADMIN DETECTED: admin@binkaa.com - GRANTING ACCESS');
-          setIsAdmin(true);
-          setChecking(false);
-          return;
-        }
+        // Check DB first
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .maybeSingle();
 
-        console.log('❌ NOT ADMIN:', user.email);
-        // For other users, they are not admins (only admin@binkaa.com is system admin)
-        setIsAdmin(false);
-
+        // Fallback: allow hardcoded system admin email if DB check fails
+        setIsAdmin(!!data || user.email === 'admin@binkaa.com');
         setChecking(false);
       } else if (!loading) {
-        console.log('❌ NO USER LOGGED IN');
         setIsAdmin(false);
         setChecking(false);
       }
     };
 
     checkAdminStatus();
-
-    // Remove timeout to prevent fallback logic that might cause issues
   }, [user, loading]);
 
   if (loading || checking) {
@@ -53,13 +40,8 @@ export const AdminProtectedRoute = ({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  if (!isAdmin) {
-    return <Navigate to="/" replace />;
-  }
+  if (!user) return <Navigate to="/auth" replace />;
+  if (!isAdmin) return <Navigate to="/" replace />;
 
   return <>{children}</>;
 };

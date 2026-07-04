@@ -60,77 +60,47 @@ export const useAuth = () => {
   };
 
   const signIn = async (email: string, password: string) => {
-    console.log('🔐 Starting sign in process for:', email);
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      console.error('❌ Sign in error:', error);
       toast.error(error.message);
       return { error };
     }
 
-    console.log('✅ Sign in successful for:', data.user?.email);
     toast.success('Connexion réussie !');
 
-    // ADMIN FORCE REDIRECT - Priorité absolue
-    if (data.user && data.user.email === 'admin@binkaa.com') {
-      console.log('👑 ADMIN FORCE REDIRECT: admin@binkaa.com detected');
-      console.log('🚀 Redirecting to admin dashboard immediately');
-
-      // Force redirect with timeout to ensure it happens
-      setTimeout(() => {
-        navigate('/admin-dashboard', { replace: true });
-      }, 100);
-
-      return { data };
-    }
-
-    // Check user role and redirect accordingly
     if (data.user) {
-      console.log('🔍 Checking role for user:', data.user.email, 'ID:', data.user.id);
-
       // Check admin role
-      const { data: adminRole, error: adminError } = await supabase
+      if (data.user.email === 'admin@binkaa.com') {
+        setTimeout(() => navigate('/admin-dashboard', { replace: true }), 100);
+        return { data };
+      }
+
+      const { data: adminRole } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', data.user.id)
         .eq('role', 'admin')
         .maybeSingle();
 
-      console.log('👑 Admin role check:', { adminRole, adminError });
-
       if (adminRole) {
-        console.log('🚀 Redirecting admin to dashboard');
         navigate('/admin-dashboard', { replace: true });
         return { data };
       }
 
-      // Check moderator role
-      const { data: modRole, error: modError } = await supabase
+      const { data: modRole } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', data.user.id)
         .eq('role', 'moderator')
         .maybeSingle();
 
-      console.log('🛡️ Moderator role check:', { modRole, modError });
-
       if (modRole) {
-        console.log('🚀 Redirecting moderator to dashboard');
         navigate('/moderator', { replace: true });
         return { data };
       }
 
-      console.log('👤 Redirecting regular user to feed');
-
-      // Prefetch feed data for faster loading
-      if (data.user?.id) {
-        prefetchFeedData(data.user.id);
-      }
+      if (data.user.id) prefetchFeedData(data.user.id);
     }
 
     navigate('/feed', { replace: true });
@@ -168,53 +138,30 @@ export const useAuth = () => {
   };
 
   const signOut = async () => {
-    console.log('🚪 SIGNOUT STARTED - User:', user?.email);
-
-    // Set user offline before signing out - use direct database call to ensure it works
     if (user?.id) {
-      console.log('📴 Setting user offline before logout...');
       try {
-        // Use direct database update before session is invalidated
-        const { error: presenceError } = await supabase
+        await supabase
           .from('user_presence')
           .upsert({
             user_id: user.id,
-            is_online: false,
+            online: false,
             last_seen: new Date().toISOString(),
             updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'user_id'
-          });
-
-        if (presenceError) {
-          console.error('❌ Error setting offline status:', presenceError);
-        } else {
-          console.log('✅ User set to offline successfully');
-        }
-
-        // Small delay to ensure the update is processed
+          }, { onConflict: 'user_id' });
         await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (error) {
-        console.error('❌ Exception setting offline status:', error);
+      } catch {
+        // silent
       }
     }
 
-    console.log('🔐 Calling supabase.auth.signOut()...');
     const { error } = await supabase.auth.signOut();
-
     if (error) {
-      console.error('❌ SignOut error:', error);
       toast.error(error.message);
       return { error };
     }
 
-    console.log('✅ Supabase signOut successful');
     toast.success('Déconnexion réussie !');
-
-    console.log('🔄 Redirecting to /auth...');
-    // Force a full page reload to /auth to ensure clean state
     window.location.href = '/auth';
-    console.log('🚀 Redirect initiated to /auth');
     return { error: null };
   };
 

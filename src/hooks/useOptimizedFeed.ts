@@ -241,66 +241,35 @@ export const useOptimizedFeed = ({
   useEffect(() => {
     if (!enableRealtime || !userId) return;
 
-    console.log('🔴 Setting up Realtime subscriptions for feed');
+    // Debounce invalidations to avoid cascade re-fetches
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedInvalidate = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['optimized-feed'] });
+      }, 2000);
+    };
 
     const channel = supabase
       .channel('feed-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'posts',
-        },
-        (payload) => {
-          console.log('🆕 New post detected:', payload.new);
-          queryClient.invalidateQueries({ queryKey: ['optimized-feed'] });
-        }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' },
+        () => debouncedInvalidate()
       )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'likes',
-        },
-        () => {
-          console.log('❤️ Like event detected');
-          queryClient.invalidateQueries({ queryKey: ['optimized-feed'] });
-        }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' },
+        () => debouncedInvalidate()
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'comments',
-        },
-        () => {
-          console.log('💬 New comment detected');
-          queryClient.invalidateQueries({ queryKey: ['optimized-feed'] });
-        }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' },
+        () => debouncedInvalidate()
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'post_shares',
-        },
-        () => {
-          console.log('🔄 New share detected');
-          queryClient.invalidateQueries({ queryKey: ['optimized-feed'] });
-        }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_shares' },
+        () => debouncedInvalidate()
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime subscription status:', status);
-      });
+      .subscribe();
 
     realtimeChannelRef.current = channel;
 
     return () => {
-      console.log('🔴 Cleaning up Realtime subscriptions');
+      if (debounceTimer) clearTimeout(debounceTimer);
       channel.unsubscribe();
     };
   }, [enableRealtime, userId, queryClient]);

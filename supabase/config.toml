@@ -1,6 +1,8 @@
-project_id = "tohgxyzfrkzpujkviutj"
+project_id = "wjoftjkqeaiyhcdabjur"
 
-# Sécurité : Activer verify_jwt sur toutes les fonctions
+[functions.cached-feed]
+verify_jwt = true
+
 [functions.cached-messages]
 verify_jwt = true
 
@@ -16,6 +18,9 @@ verify_jwt = true
 [functions.cached-media]
 verify_jwt = true
 
+[functions.cached-notifications]
+verify_jwt = true
+
 [functions.count-unread-messages]
 verify_jwt = true
 
@@ -27,3 +32,31 @@ verify_jwt = true
 
 [functions.send-push-notification]
 verify_jwt = true
+
+[functions.friend-suggestions]
+verify_jwt = true
+
+[functions.ai-recommendations]
+verify_jwt = true
+
+[functions.compute-feed-ranking]
+verify_jwt = true
+
+[functions.live-stream-session]
+verify_jwt = true
+
+[functions.live-stream-fanout]
+verify_jwt = true
+
+[functions.moderate-chat]
+verify_jwt = true
+
+[functions.optimize-image]
+verify_jwt = true
+
+[functions.invalidate-cache]
+verify_jwt = true
+
+# Public functions (no auth required)
+[functions.cleanup-expired-stories]
+verify_jwt = false

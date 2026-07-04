@@ -41,6 +41,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useOptimizedFriendRequests } from '@/hooks/useOptimizedFriendRequests';
 import {
   Dialog,
   DialogContent,
@@ -100,12 +102,10 @@ export const Navbar = () => {
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
-  // Utilisation du hook pour les messages non lus
   const { totalUnread: unreadMessagesCount = 0 } = useUnreadMessages();
-
-  // Valeurs temporaires pour les notifications (à implémenter)
-  const unreadCount = 0;
-  const pendingFriendRequests = 0;
+  const { unreadCount = 0 } = useNotifications();
+  const { receivedRequests } = useOptimizedFriendRequests();
+  const pendingFriendRequests = receivedRequests.length;
 
   if (!user) return null;
 
